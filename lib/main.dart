@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'calendario_screen.dart';
-import 'clientsscreen.dart';
+import 'clientes_screen.dart';
 import 'homescreen.dart';
 import 'empleados_screen.dart';
 import 'pagos_screen.dart';
@@ -61,7 +61,7 @@ class _BottomNavState extends State<BottomNav> {
 
   final List<Widget> _screens = const [
     HomeScreen(),
-    ClientsScreen(),
+    ClientesScreen(),
     CalendarioScreen(),
     EmpleadosScreen(),
     PagosScreen(),

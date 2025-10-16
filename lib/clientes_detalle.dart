@@ -1,42 +1,15 @@
-/*
- * =============================================================================
- * PANTALLA DE DETALLE DE EMPLEADO
- * =============================================================================
- * 
- * Archivo: empleadoseditar_screen.dart
- * Propósito: Visualización detallada de la información de un empleado
- * Autor: Sistema de Gestión de Personal
- * Fecha: 2025
- * Versión: 2.0.0
- * 
- * Descripción:
- * Esta pantalla muestra la información completa de un empleado, incluyendo
- * datos personales, estado, historial y documentos. Utiliza un diseño modular,
- * validaciones robustas y una interfaz profesional siguiendo Material Design.
- * 
- * Características principales:
- * - Visualización de datos personales y laborales
- * - Estado con badge de color
- * - Tabs de información (modular, preparado para expansión)
- * - Formateo profesional de fechas y datos
- * - Código altamente documentado y mantenible
- * 
- * =============================================================================
- */
-
 import 'package:flutter/material.dart';
-import 'empleados_detalle_tabbar.dart';
 
-/// Widget de detalle de empleado
+/// Widget de detalle de paciente
 ///
-/// Muestra la información completa de un empleado en formato de perfil,
+/// Muestra la información completa de un paciente en formato de perfil,
 /// con tabs para información, historial y documentos (expansible).
-class EmpleadosDetalle extends StatelessWidget {
-  /// Mapa con los datos del empleado a mostrar
-  final Map<String, dynamic> empleado;
+class ClientesDetalle extends StatelessWidget {
+  /// Mapa con los datos del paciente a mostrar
+  final Map<String, dynamic> paciente;
 
   /// Constructor
-  const EmpleadosDetalle({Key? key, required this.empleado}) : super(key: key);
+  const ClientesDetalle({Key? key, required this.paciente}) : super(key: key);
 
   // Eliminado: late final double _anchoPantalla = _calcularAnchoPantalla(context);
 
@@ -88,7 +61,7 @@ class EmpleadosDetalle extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               const Text(
-                'Detalle de Empleado',
+                'Detalle de Paciente',
                 style: TextStyle(
                   color: Colors.black,
                   fontSize: 20,
@@ -118,8 +91,6 @@ class EmpleadosDetalle extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildNombre(),
-                const SizedBox(height: 4),
-                _buildCargo(),
                 const SizedBox(height: 12),
                 _buildEstadoBadge(),
               ],
@@ -162,22 +133,9 @@ class EmpleadosDetalle extends StatelessWidget {
     );
   }
 
-  /// Tipo de empleado (cargo)
-  Widget _buildCargo() {
-    return Text(
-      empleado['tipo_empleado_id']?.toString() ?? '',
-      style: TextStyle(
-        fontSize: 14,
-        color: Colors.grey[600],
-        fontWeight: FontWeight.w400,
-        height: 1.3,
-      ),
-    );
-  }
-
   /// Badge de estado más compacto
   Widget _buildEstadoBadge() {
-    final String estado = empleado['estado']?.toString() ?? 'activo';
+    final String estado = paciente['estado'] ? 'Con tratamiento' : 'Sin tratamiento';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
@@ -286,21 +244,21 @@ class EmpleadosDetalle extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        _buildInfoItem('Nombres', empleado['nombres']?.toString() ?? ''),
+        _buildInfoItem('Nombres', paciente['nombres']?.toString() ?? ''),
         _buildInfoItem(
           'Apellido Paterno',
-          empleado['apellido_paterno']?.toString() ?? '',
+          paciente['apellido_paterno']?.toString() ?? '',
         ),
         _buildInfoItem(
           'Apellido Materno',
-          empleado['apellido_materno']?.toString() ?? '',
+          paciente['apellido_materno']?.toString() ?? '',
         ),
-        _buildInfoItem('DNI', empleado['dni_empleado']?.toString() ?? ''),
-        _buildInfoItem('Edad', empleado['edad']?.toString() ?? ''),
-        _buildInfoItem('Género', empleado['genero']?.toString() ?? ''),
+        _buildInfoItem('DNI', paciente['dni']?.toString() ?? ''),
+        _buildInfoItem('Edad', paciente['edad']?.toString() ?? ''),
+        _buildInfoItem('Género', paciente['genero']?.toString() ?? ''),
         _buildInfoItem(
           'Fecha de Nacimiento',
-          _formatearFecha(empleado['fecha_nacimiento']),
+          _formatearFecha(paciente['fecha_nacimiento']),
         ),
 
         const SizedBox(height: 16),
@@ -315,32 +273,10 @@ class EmpleadosDetalle extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        _buildInfoItem('Dirección', empleado['direccion']?.toString() ?? ''),
+        _buildInfoItem('Dirección', paciente['direccion']?.toString() ?? ''),
         _buildInfoItem(
           'Teléfono',
-          empleado['numero_telefonico']?.toString() ?? '',
-        ),
-
-        const SizedBox(height: 16),
-
-        // Información Laboral
-        const Text(
-          'Información Laboral',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-            color: Colors.blue,
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildInfoItem(
-          'Tipo de Empleado',
-          empleado['tipo_empleado_id']?.toString() ?? '',
-        ),
-        _buildInfoItem('Salario', _formatearSalario(empleado['salario'])),
-        _buildInfoItem(
-          'Fecha de Contratación',
-          _formatearFecha(empleado['fecha_contratacion']),
+          paciente['numero_telefonico']?.toString() ?? '',
         ),
       ],
     );
@@ -384,8 +320,8 @@ class EmpleadosDetalle extends StatelessWidget {
 
   /// Obtiene las iniciales del nombre completo
   String _obtenerIniciales() {
-    final nombres = empleado['nombres']?.toString() ?? '';
-    final apellidoPaterno = empleado['apellido_paterno']?.toString() ?? '';
+    final nombres = paciente['nombres']?.toString() ?? '';
+    final apellidoPaterno = paciente['apellido_paterno']?.toString() ?? '';
 
     if (nombres.isEmpty && apellidoPaterno.isEmpty) return '?';
 
@@ -399,9 +335,9 @@ class EmpleadosDetalle extends StatelessWidget {
 
   /// Construye el nombre completo a partir de los campos individuales
   String _obtenerNombreCompleto() {
-    final nombres = empleado['nombres']?.toString() ?? '';
-    final apellidoPaterno = empleado['apellido_paterno']?.toString() ?? '';
-    final apellidoMaterno = empleado['apellido_materno']?.toString() ?? '';
+    final nombres = paciente['nombres']?.toString() ?? '';
+    final apellidoPaterno = paciente['apellido_paterno']?.toString() ?? '';
+    final apellidoMaterno = paciente['apellido_materno']?.toString() ?? '';
 
     return '$nombres $apellidoPaterno $apellidoMaterno'.trim();
   }
@@ -409,12 +345,12 @@ class EmpleadosDetalle extends StatelessWidget {
   /// Devuelve el color correspondiente al estado
   Color _getColorEstado(String estado) {
     switch (estado.toLowerCase()) {
-      case 'activo':
+      case 'con tratamiento':
         return Colors.green;
-      case 'inactivo':
-        return Colors.red;
-      default:
+      case 'sin tratamiento':
         return Colors.grey;
+      default:
+        return Colors.green;
     }
   }
 
@@ -437,22 +373,6 @@ class EmpleadosDetalle extends StatelessWidget {
       return '${fecha.day.toString().padLeft(2, '0')}/${fecha.month.toString().padLeft(2, '0')}/${fecha.year}';
     } catch (e) {
       return fechaInput.toString();
-    }
-  }
-
-  /// Formatea el salario a formato monetario
-  String _formatearSalario(dynamic salario) {
-    if (salario == null) return 'No disponible';
-
-    try {
-      final numero = salario is int
-          ? salario
-          : int.tryParse(salario.toString());
-      if (numero == null) return salario.toString();
-
-      return 'S/. ${numero.toStringAsFixed(2)}';
-    } catch (e) {
-      return salario.toString();
     }
   }
 }
