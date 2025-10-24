@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'views/empleado_añadir.dart';
+import 'views/tratamiendos.dart';
 
 /// Widget de detalle de paciente
 ///
@@ -135,7 +137,9 @@ class ClientesDetalle extends StatelessWidget {
 
   /// Badge de estado más compacto
   Widget _buildEstadoBadge() {
-    final String estado = paciente['estado'] ? 'Con tratamiento' : 'Sin tratamiento';
+    final String estado = paciente['activo']
+        ? 'con tratamientos activos'
+        : 'sin tratamientos activos';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
@@ -178,15 +182,15 @@ class ClientesDetalle extends StatelessWidget {
             tabs: [
               SizedBox(
                 width: _anchoPantalla / 4,
-                child: Tab(text: 'Atenciones'),
+                child: Tab(text: 'Historial'),
+              ),
+              SizedBox(
+                width: _anchoPantalla / 4,
+                child: Tab(text: 'Tratamientos'),
               ),
               SizedBox(
                 width: _anchoPantalla / 4,
                 child: Tab(text: 'Pagos'),
-              ),
-              SizedBox(
-                width: _anchoPantalla / 4,
-                child: Tab(text: 'Información'),
               ),
             ],
           ),
@@ -198,27 +202,9 @@ class ClientesDetalle extends StatelessWidget {
                 child: TabBarView(
                   children: [
                     // Aquí van los contenidos de cada tab
-                    Column(
-                      children: [
-                        Center(child: Text('Contenido Atenciones')),
-                        Center(child: Text('Lista de Tratamientos')),
-                        Center(child: Text('Citas Programadas')),
-                        Center(child: Text('Historial de Atenciones')),
-                        Center(child: Text('Próxima Cita')),
-                        Center(child: Text('Estado del Tratamiento')),
-                        Center(child: Text('Observaciones del Paciente')),
-                        Center(child: Text('Plan de Tratamiento')),
-                        Center(child: Text('Medico Asignado')),
-                        Center(child: Text('Costos y Pagos')),
-                      ],
-                    ),
-                    Center(child: Text('Contenido Pagos')),
-                    SingleChildScrollView(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: _buildTabContent(),
-                      ),
-                    ),
+                    _historialTab(context),
+                    _tratamientosTab(context, paciente),
+                    _pagosTab(context),
                   ],
                 ),
               );
@@ -244,7 +230,52 @@ class ClientesDetalle extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        _buildInfoItem('Nombres', paciente['nombres']?.toString() ?? ''),
+        _buildInfoItem('Nombres', paciente['nombre']?.toString() ?? ''),
+        _buildInfoItem(
+          'Apellido Paterno',
+          paciente['apellido_paterno']?.toString() ?? '',
+        ),
+        _buildInfoItem(
+          'Apellido Materno',
+          paciente['apellido_materno']?.toString() ?? '',
+        ),
+        _buildInfoItem('DNI', paciente['dni']?.toString() ?? ''),
+        _buildInfoItem('Edad', paciente['edad']?.toString() ?? ''),
+        _buildInfoItem('Género', paciente['genero']?.toString() ?? ''),
+        _buildInfoItem(
+          'Fecha de Nacimiento',
+          _formatearFecha(paciente['fecha_nacimiento']),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Información de Contacto
+        const Text(
+          'Información de Contacto',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _buildInfoItem('Dirección', paciente['direccion']?.toString() ?? ''),
+        _buildInfoItem(
+          'Teléfono',
+          paciente['numero_telefonico']?.toString() ?? '',
+        ),
+
+        // Información Personal
+        const Text(
+          'Datos Personales',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: Colors.blue,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _buildInfoItem('Nombres', paciente['nombre']?.toString() ?? ''),
         _buildInfoItem(
           'Apellido Paterno',
           paciente['apellido_paterno']?.toString() ?? '',
@@ -282,6 +313,64 @@ class ClientesDetalle extends StatelessWidget {
     );
   }
 
+  Widget _historialTab(BuildContext context) {
+    return Scaffold(
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: _buildTabContent(),
+        ),
+      ),
+    );
+  }
+
+  Widget _tratamientosTab(BuildContext context, Map<String, dynamic> paciente) {
+    return TratamiendosScreen(paciente: paciente);
+  }
+
+  Widget _pagosTab(BuildContext context) {
+    return Scaffold(
+      body: Center(child: Text('Contenido Pagos')),
+      //floatingActionButton: _botonFlotanteTratamientos(context),
+    );
+  }
+
+
+
+
+  /// Construye el botón flotante para agregar empleado
+  Widget _botonFlotanteTratamientos(BuildContext context) {
+    return FloatingActionButton(
+      onPressed: () {
+        try {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NuevoEmpleado(),
+            ),
+          );
+          print('✅ Navegación exitosa');
+        } catch (e) {
+          print('❌ ERROR: $e');
+          // Fallback seguro
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => Scaffold(
+                appBar: AppBar(title: const Text('Error - Usando fallback')),
+                body: const Center(
+                  child: Text('Hubo un error, pero esto es seguro'),
+                ),
+              ),
+            ),
+          );
+        }
+      }, //_navegarACrearEmpleado,
+      tooltip: 'Agregar empleado',
+      backgroundColor: Colors.blue,
+      child: const Icon(Icons.medical_services, color: Colors.white, size: 25),
+    );
+  }
   /// Ítem de información con etiqueta y valor
   Widget _buildInfoItem(String label, String value) {
     return Padding(
@@ -320,7 +409,7 @@ class ClientesDetalle extends StatelessWidget {
 
   /// Obtiene las iniciales del nombre completo
   String _obtenerIniciales() {
-    final nombres = paciente['nombres']?.toString() ?? '';
+    final nombres = paciente['nombre']?.toString() ?? '';
     final apellidoPaterno = paciente['apellido_paterno']?.toString() ?? '';
 
     if (nombres.isEmpty && apellidoPaterno.isEmpty) return '?';
@@ -335,7 +424,7 @@ class ClientesDetalle extends StatelessWidget {
 
   /// Construye el nombre completo a partir de los campos individuales
   String _obtenerNombreCompleto() {
-    final nombres = paciente['nombres']?.toString() ?? '';
+    final nombres = paciente['nombre']?.toString() ?? '';
     final apellidoPaterno = paciente['apellido_paterno']?.toString() ?? '';
     final apellidoMaterno = paciente['apellido_materno']?.toString() ?? '';
 
@@ -345,9 +434,9 @@ class ClientesDetalle extends StatelessWidget {
   /// Devuelve el color correspondiente al estado
   Color _getColorEstado(String estado) {
     switch (estado.toLowerCase()) {
-      case 'con tratamiento':
+      case 'con tratamientos activos':
         return Colors.green;
-      case 'sin tratamiento':
+      case 'sin tratamientos activos':
         return Colors.grey;
       default:
         return Colors.green;

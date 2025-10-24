@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'empleados_detalle_screen.dart';
+import 'package:proto_appdental_v02/views/empleado_añadir.dart';
 //import 'empleadosform_screen.dart';
 //import 'empleadoseditar_screen.dart';
 
@@ -311,14 +312,7 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
     );
   }
 
-  /// Construye el botón flotante para agregar empleado
-  Widget _buildFloatingActionButton() {
-    return FloatingActionButton(
-      onPressed: () {}, //_navegarACrearEmpleado,
-      tooltip: 'Agregar empleado',
-      child: const Icon(Icons.person_add),
-    );
-  }
+  
 
   Widget _construirEmpleadoCard(Map<String, dynamic> empleado) {
     final String tipoEmpleado = empleado['tipo_empleado_id'] ?? 'Sin tipo';
@@ -441,7 +435,7 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
     int edad,
   ) {
     final String nombreCompleto =
-        '${empleado['nombres'] ?? ''} ${empleado['apellido_paterno'] ?? ''} ${empleado['apellido_materno'] ?? ''}'
+        '${empleado['nombre'] ?? ''} ${empleado['apellido_paterno'] ?? ''} ${empleado['apellido_materno'] ?? ''}'
             .trim();
 
     return Column(
@@ -570,6 +564,40 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
     );
   }
 
+  /// Construye el botón flotante para agregar empleado
+  Widget _buildFloatingActionButton() {
+    return FloatingActionButton(
+      onPressed: () {
+        try {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NuevoEmpleado(),
+            ),
+          );
+          print('✅ Navegación exitosa');
+        } catch (e) {
+          print('❌ ERROR: $e');
+          // Fallback seguro
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => Scaffold(
+                appBar: AppBar(title: const Text('Error - Usando fallback')),
+                body: const Center(
+                  child: Text('Hubo un error, pero esto es seguro'),
+                ),
+              ),
+            ),
+          );
+        }
+      }, //_navegarACrearEmpleado,
+      tooltip: 'Agregar empleado',
+      backgroundColor: Colors.blue,
+      child: const Icon(Icons.person_add, color: Colors.white, size: 25),
+    );
+  }
+
   Widget _construirBotonDetalle(Map<String, dynamic> empleado) {
     return IconButton(
       onPressed: () {
@@ -618,20 +646,6 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
     );
   }
 
-  /// Construye el botón de eliminar
-  Widget _buildBotonEliminar(Map<String, dynamic> empleado) {
-    return IconButton(
-      onPressed: () => _confirmarEliminacion(empleado),
-      icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-      padding: const EdgeInsets.all(8),
-      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-      tooltip: 'Eliminar empleado',
-      style: IconButton.styleFrom(
-        backgroundColor: Colors.red[50],
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
-  }
 
   // ========== MÉTODOS DE UTILIDAD ==========
 
@@ -680,7 +694,7 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
   String _obtenerNombreCompletoCorto(Map<String, dynamic> empleado) {
     final String nombreCompleto =
         empleado['nombre_completo'] ??
-        '${empleado['nombres']} ${empleado['apellido_paterno']}' ??
+        '${empleado['nombre']} ${empleado['apellido_paterno']}' ??
         'Nombre no disponible';
 
     // Dividir el nombre completo en partes
@@ -761,7 +775,7 @@ class _EmpleadosScreenState extends State<EmpleadosScreen> {
   /// Confirma la eliminación de un empleado
   Future<void> _confirmarEliminacion(Map<String, dynamic> empleado) async {
     final String nombreCompleto =
-        '${empleado['nombres'] ?? ''} ${empleado['apellido_paterno'] ?? ''}'
+        '${empleado['nombre'] ?? ''} ${empleado['apellido_paterno'] ?? ''}'
             .trim();
 
     final bool? confirmar = await showDialog<bool>(

@@ -25,7 +25,6 @@
  */
 
 import 'package:flutter/material.dart';
-import 'empleados_detalle_tabbar.dart';
 
 /// Widget de detalle de empleado
 ///
@@ -42,7 +41,6 @@ class EmpleadosDetalle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    late final double _anchoPantalla = _calcularAnchoPantalla(context);
     return Scaffold(
       extendBodyBehindAppBar: false,
       backgroundColor: Colors.grey[50],
@@ -202,7 +200,6 @@ class EmpleadosDetalle extends StatelessWidget {
   }
 
   Widget _buildTabsHeader(BuildContext context) {
-    final double anchoTab = 80.0;
     final double _anchoPantalla = _calcularAnchoPantalla(context);
     return DefaultTabController(
       length: 3, // Número de tabs
@@ -286,7 +283,7 @@ class EmpleadosDetalle extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        _buildInfoItem('Nombres', empleado['nombres']?.toString() ?? ''),
+        _buildInfoItem('Nombres', empleado['nombre']?.toString() ?? ''),
         _buildInfoItem(
           'Apellido Paterno',
           empleado['apellido_paterno']?.toString() ?? '',
@@ -384,12 +381,12 @@ class EmpleadosDetalle extends StatelessWidget {
 
   /// Obtiene las iniciales del nombre completo
   String _obtenerIniciales() {
-    final nombres = empleado['nombres']?.toString() ?? '';
+    final nombre = empleado['nombre']?.toString() ?? '';
     final apellidoPaterno = empleado['apellido_paterno']?.toString() ?? '';
 
-    if (nombres.isEmpty && apellidoPaterno.isEmpty) return '?';
+    if (nombre.isEmpty && apellidoPaterno.isEmpty) return '?';
 
-    String inicialNombre = nombres.isNotEmpty ? nombres[0].toUpperCase() : '';
+    String inicialNombre = nombre.isNotEmpty ? nombre[0].toUpperCase() : '';
     String inicialApellido = apellidoPaterno.isNotEmpty
         ? apellidoPaterno[0].toUpperCase()
         : '';
@@ -399,11 +396,11 @@ class EmpleadosDetalle extends StatelessWidget {
 
   /// Construye el nombre completo a partir de los campos individuales
   String _obtenerNombreCompleto() {
-    final nombres = empleado['nombres']?.toString() ?? '';
+    final nombre = empleado['nombre']?.toString() ?? '';
     final apellidoPaterno = empleado['apellido_paterno']?.toString() ?? '';
     final apellidoMaterno = empleado['apellido_materno']?.toString() ?? '';
 
-    return '$nombres $apellidoPaterno $apellidoMaterno'.trim();
+    return '$nombre $apellidoPaterno $apellidoMaterno'.trim();
   }
 
   /// Devuelve el color correspondiente al estado

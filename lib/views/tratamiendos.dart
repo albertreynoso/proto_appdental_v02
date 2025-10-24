@@ -1,77 +1,73 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'clientes_detalle.dart';
-import 'views/cliente_añadir.dart';
-import 'views/tratamiendos.dart';
-//import 'empleadosform_screen.dart';
-//import 'empleadoseditar_screen.dart';
+import 'package:proto_appdental_v02/empleados_detalle_screen.dart';
+import 'package:proto_appdental_v02/views/tratamiento_a%C3%B1adir.dart';
 
-/// Pantalla principal para la gestión de empleados de clínica dental
-///
-/// Permite visualizar, crear, editar y eliminar empleados
-/// Integra con Firebase Firestore para el almacenamiento de datos
-class ClientesScreen extends StatefulWidget {
-  const ClientesScreen({super.key});
+class TratamiendosScreen extends StatefulWidget {
+  final Map<String, dynamic> paciente;
+
+  const TratamiendosScreen({super.key, required this.paciente});
 
   @override
-  State<ClientesScreen> createState() => _ClientesScreenState();
+  State<TratamiendosScreen> createState() => _TratamiendosScreenState();
 }
 
-/// Estado de la pantalla de empleados
-class _ClientesScreenState extends State<ClientesScreen> {
+class _TratamiendosScreenState extends State<TratamiendosScreen> {
   // ========== VARIABLES DE ESTADO ==========
 
-  /// Lista de pacientes obtenidos de Firestore
-  List<Map<String, dynamic>> _pacientes = [];
+  /// Lista de tratamientos obtenidos de Firestore
+  List<Map<String, dynamic>> _tratamientos = [];
 
   /// Indica si los datos están siendo cargados
   bool _isLoading = true;
 
-  /// Referencia a la colección de pacientes en Firestore
-  static const String _collectionName = 'pacientes';
+  /// Referencia a la colección de tratamientos en Firestore
+  static const String _collectionName = 'tratamientos';
 
   // ========== CICLO DE VIDA DEL WIDGET ==========
 
   @override
   void initState() {
     super.initState();
-    _cargarPacientes();
+    _cargarTratamientos();
   }
 
   // ========== MÉTODOS DE DATOS ==========
 
-  /// Carga la lista de pacientes desde Firestore
-  Future<void> _cargarPacientes() async {
-    try {
-      setState(() => _isLoading = true);
+  /// Carga la lista de tratamientos desde Firestore
+Future<void> _cargarTratamientos() async {
+  try {
+    setState(() => _isLoading = true);
 
-      final snapshot = await FirebaseFirestore.instance
-          .collection(_collectionName)
-          .orderBy('apellido_paterno', descending: true)
-          .get();
+    final snapshot = await FirebaseFirestore.instance
+        .collection(_collectionName)
+        .where('dni_paciente', isEqualTo: widget.paciente['dni_cliente']) // ← Filtro por DNI
+        //.orderBy('fecha_creacion', descending: true)
+        .get();
 
-      final List<Map<String, dynamic>> pacientesList = snapshot.docs
-          .map(
-            (DocumentSnapshot doc) => {
-              'id': doc.id,
-              ...doc.data() as Map<String, dynamic>,
-            },
-          )
-          .toList();
+    final List<Map<String, dynamic>> tratamientosList = snapshot.docs
+        .map(
+          (DocumentSnapshot doc) => {
+            'id': doc.id,
+            ...doc.data() as Map<String, dynamic>,
+          },
+        )
+        .toList();
 
-      if (mounted) {
-        setState(() {
-          _pacientes = pacientesList;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        _mostrarMensajeError('Error al cargar pacientes: $e');
-      }
+    if (mounted) {
+      setState(() {
+        _tratamientos = tratamientosList;
+        _isLoading = false;
+      });
+    }
+  } catch (e) {
+    if (mounted) {
+      setState(() => _isLoading = false);
+      _mostrarMensajeError('Error al cargar tratamientos: $e');
     }
   }
+}
 
   // ========== MÉTODOS DE UI ==========
 
@@ -80,82 +76,44 @@ class _ClientesScreenState extends State<ClientesScreen> {
     return Scaffold(
       extendBodyBehindAppBar: false, // Asegúrate de que esté en false
       backgroundColor: const Color(0xFFF7F7F7),
-      appBar: _construirAppBar(),
-      body: _buildBody(_pacientes),
-      floatingActionButton: _buildFloatingActionButton(),
-    );
-  }
-
-  /// Construye la barra de aplicación
-  PreferredSizeWidget _construirAppBar() {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(56),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white, // Color sólido
-          // Puedes agregar un border o boxShadow si quieres una línea o sombra
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x11000000),
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: Row(
-            children: [
-              // Tu logo o icono
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Image.asset('assets/img/dentlink_logo.png', height: 40),
-              ),
-              const Text(
-                'DentLink',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              // ...otros widgets si necesitas
-            ],
-          ),
-        ),
+      body: _buildBody(_tratamientos),
+      floatingActionButton: _buildFloatingActionButton(
+        context,
+        widget.paciente,
       ),
     );
   }
 
   /// Construye el cuerpo principal de la pantalla
-  Widget _buildBody(List<Map<String, dynamic>> pacientesFiltrados) {
+  Widget _buildBody(List<Map<String, dynamic>> tratamientosFiltrados) {
     return Column(
       children: [
-        // Lista de pacientes
-        Expanded(child: _buildListaPacientes(pacientesFiltrados)),
+        // Lista de tratamientos
+        Expanded(child: _buildListaTratamientos(tratamientosFiltrados)),
       ],
     );
   }
 
-  /// Construye la lista de pacientes
-  Widget _buildListaPacientes(List<Map<String, dynamic>> pacientesFiltrados) {
+  /// Construye la lista de tratamientos
+  Widget _buildListaTratamientos(
+    List<Map<String, dynamic>> tratamientosFiltrados,
+  ) {
     if (_isLoading) {
       return _buildLoadingWidget();
     }
 
-    if (pacientesFiltrados.isEmpty) {
-      return _buildEmptyStateWidget();
+    if (tratamientosFiltrados.isEmpty) {
+      return _construirWidgetEstadoVacio();
     }
 
     return RefreshIndicator(
-      onRefresh: _cargarPacientes,
+      onRefresh: _cargarTratamientos,
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: pacientesFiltrados.length,
+        itemCount: tratamientosFiltrados.length,
         itemBuilder: (context, index) {
-          final paciente = pacientesFiltrados[index];
-          return _construirPacienteCard(paciente);
+          final tratamiento = tratamientosFiltrados[index];
+          return _construirTratamientoCard(tratamiento);
         },
       ),
     );
@@ -170,7 +128,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
           CircularProgressIndicator(),
           SizedBox(height: 16),
           Text(
-            'Cargando pacientes...',
+            'Cargando tratamientos...',
             style: TextStyle(fontSize: 16, color: Colors.grey),
           ),
         ],
@@ -179,7 +137,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
   }
 
   /// Widget para estado vacío
-  Widget _buildEmptyStateWidget() {
+  Widget _construirWidgetEstadoVacio() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -191,7 +149,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            'No hay pacientes registrados',
+            'No hay tratamientos registrados',
             style: TextStyle(
               fontSize: 18,
               color: Colors.grey[600],
@@ -203,8 +161,8 @@ class _ClientesScreenState extends State<ClientesScreen> {
     );
   }
 
-  Widget _construirPacienteCard(Map<String, dynamic> paciente) {
-    final bool isActive = paciente['activo'] ?? true;
+  Widget _construirTratamientoCard(Map<String, dynamic> tratamiento) {
+    final bool isActive = tratamiento['activo'] ?? true;
 
     return Card(
       color: Colors.white,
@@ -215,19 +173,20 @@ class _ClientesScreenState extends State<ClientesScreen> {
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            // Avatar/Icono del paciente
-            _buildAvatarPaciente(),
+            // Avatar/Icono del tratamiento
+            _buildAvatarTratamiento(),
 
             const SizedBox(width: 12),
 
-            // Información del paciente - MODIFICADO
+            // Información del tratamiento - MODIFICADO
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Nombre completo (primer nombre + primer apellido)
                   Text(
-                    _obtenerNombreCompletoCorto(paciente),
+                    '${tratamiento['tratamiento'] ?? 'No disponible'}',
+                    //_obtenerNombreCompletoCorto(tratamiento),
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -237,14 +196,19 @@ class _ClientesScreenState extends State<ClientesScreen> {
 
                   const SizedBox(height: 4),
 
-                  // DNI paciente
+                  // Estado tratamiento
                   Row(
                     children: [
-                      Icon(Icons.badge, size: 16, color: Colors.grey[700]),
+                      Icon(
+                        Icons.calendar_today,
+                        size: 16,
+                        color: Colors.grey[700],
+                      ),
+                      SizedBox(width: 4), // Espacio entre icono y texto
                       Text(
-                        ' DNI: ${paciente['dni_cliente'] ?? 'No especificado'}',
+                        ' ${formatearFechaTimestamp(tratamiento['fecha_creacion'])} - ${isActive ? 'Actualidad' : formatearFechaTimestamp(tratamiento['fecha_finalizacion'])}',
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 12,
                           fontWeight: FontWeight.w400,
                           color: const Color.fromARGB(255, 58, 37, 37),
                         ),
@@ -261,17 +225,17 @@ class _ClientesScreenState extends State<ClientesScreen> {
                         width: 8,
                         height: 8,
                         decoration: BoxDecoration(
-                          color: isActive ? Colors.green : Colors.grey[600],
+                          color: Colors.green,
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        isActive ? 'Con tratamiento' : 'Sin tratamiento',
+                        'Estado: ${tratamiento['activo'] ? 'Activo' : 'Inactivo'}',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w400,
-                          color: isActive ? Colors.green : Colors.grey[600],
+                          color: Colors.green,
                         ),
                       ),
                     ],
@@ -283,15 +247,15 @@ class _ClientesScreenState extends State<ClientesScreen> {
             const SizedBox(width: 12),
 
             // Acciones
-            _buildAccionesColumn(paciente),
+            _buildAccionesColumn(tratamiento),
           ],
         ),
       ),
     );
   }
 
-  /// Construye el avatar/icono del paciente
-  Widget _buildAvatarPaciente() {
+  /// Construye el avatar/icono del tratamiento
+  Widget _buildAvatarTratamiento() {
     return Container(
       width: 50,
       height: 50,
@@ -301,23 +265,23 @@ class _ClientesScreenState extends State<ClientesScreen> {
   }
 
   /// Construye la columna de acciones (editar y eliminar)
-  Widget _buildAccionesColumn(Map<String, dynamic> paciente) {
+  Widget _buildAccionesColumn(Map<String, dynamic> tratamiento) {
     return Column(
       mainAxisSize: MainAxisSize.min,
-      children: [_construirBotonDetalle(paciente)],
+      children: [_construirBotonDetalle(tratamiento)],
     );
   }
 
-  Widget _construirBotonDetalle(Map<String, dynamic> paciente) {
+  Widget _construirBotonDetalle(Map<String, dynamic> tratamiento) {
     return IconButton(
       onPressed: () {
         print('🚀 Intentando navegar...');
-        
+
         try {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ClientesDetalle(paciente: paciente),
+              builder: (context) => EmpleadosDetalle(empleado: tratamiento),
             ),
           );
           print('✅ Navegación exitosa');
@@ -335,21 +299,24 @@ class _ClientesScreenState extends State<ClientesScreen> {
               ),
             ),
           );
-        } 
+        }
       },
       icon: const Icon(Icons.chevron_right, color: Colors.grey, size: 26),
     );
   }
 
   /// Construye el botón flotante para agregar empleado
-  Widget _buildFloatingActionButton() {
+  Widget _buildFloatingActionButton(
+    BuildContext context,
+    Map<String, dynamic> paciente,
+  ) {
     return FloatingActionButton(
       onPressed: () {
         try {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => NuevoCliente(),
+              builder: (context) => NuevoTratamiento(paciente: paciente),
             ),
           );
           print('✅ Navegación exitosa');
@@ -369,35 +336,25 @@ class _ClientesScreenState extends State<ClientesScreen> {
           );
         }
       }, //_navegarACrearEmpleado,
-      tooltip: 'Agregar empleado',
+      tooltip: 'Agregar Tratamiento',
       backgroundColor: Colors.blue,
-      child: const Icon(Icons.person_add, color: Colors.white, size: 25),
+      child: const Icon(Icons.medical_services, color: Colors.white, size: 25),
     );
   }
 
   // ========== MÉTODOS DE UTILIDAD ==========
 
+  String formatearFechaTimestamp(Timestamp timestamp) {
+  try {
+    DateTime fecha = timestamp.toDate();
+    return DateFormat('dd/MM/yyyy').format(fecha);
+  } catch (e) {
+    return 'Fecha inválida';
+  }
+}
   String _capitalizeFirst(String text) {
     if (text.isEmpty) return text;
     return text[0].toUpperCase() + text.substring(1).toLowerCase();
-  }
-
-  // Método auxiliar para obtener nombre corto (primer nombre + primer apellido)
-  String _obtenerNombreCompletoCorto(Map<String, dynamic> paciente) {
-    final String nombreCompleto =
-        paciente['nombre_completo'] ??
-        '${paciente['nombre']} ${paciente['apellido_paterno']}' ??
-        'Nombre no disponible';
-
-    // Dividir el nombre completo en partes
-    final partesNombre = nombreCompleto.split(' ');
-
-    // Tomar primer nombre y primer apellido
-    if (partesNombre.length >= 2) {
-      return '${partesNombre[0]} ${partesNombre[1]}';
-    } else {
-      return partesNombre[0]; // Si solo tiene un nombre
-    }
   }
 
   // ========== MÉTODOS DE DIÁLOGOS Y MENSAJES ==========
@@ -413,7 +370,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
         action: SnackBarAction(
           label: 'Reintentar',
           textColor: Colors.white,
-          onPressed: _cargarPacientes,
+          onPressed: _cargarTratamientos,
         ),
       ),
     );
