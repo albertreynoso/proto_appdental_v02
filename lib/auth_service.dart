@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:proto_appdental_v02/onboardingflow/login.dart';
 import 'package:proto_appdental_v02/main_app.dart';
+import 'package:another_flushbar/flushbar.dart';
 
 class AuthService {
   //Servicio para registrar usuario
@@ -44,13 +45,16 @@ class AuthService {
         default:
           message = 'Ha ocurrido un error. Intente nuevamente.';
       }
-      Fluttertoast.showToast(
-        msg: message,
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.SNACKBAR,
-        backgroundColor: Colors.black54,
-        textColor: Colors.white,
-        fontSize: 14.0,
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: Duration(seconds: 2), // Exacto 2 segundos
+          backgroundColor: Colors.black54,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
       );
     } catch (e) {}
   }
@@ -95,17 +99,21 @@ class AuthService {
         default:
           message = 'Ha ocurrido un error. Intente nuevamente.';
       }
-      Fluttertoast.showToast(
-        msg: message,
-        toastLength: Toast.LENGTH_LONG,
-        gravity: ToastGravity.SNACKBAR,
-        backgroundColor: Colors.black54,
-        textColor: Colors.white,
-        fontSize: 14.0,
-      );
+      mostrarSnackBarSuperior(context, message);  
+      
     } catch (e) {}
   }
-
+void mostrarSnackBarSuperior(BuildContext context, String mensaje) {
+  Flushbar(
+    message: mensaje,
+    icon: const Icon(Icons.info_outline, color: Colors.white),
+    backgroundColor: Colors.redAccent,
+    duration: const Duration(seconds: 2),
+    flushbarPosition: FlushbarPosition.TOP,
+    margin: const EdgeInsets.all(12),
+    borderRadius: BorderRadius.circular(12),
+  ).show(context);
+}
   Future<void> signout({required BuildContext context}) async {
     await FirebaseAuth.instance.signOut();
     await Future.delayed(const Duration(seconds: 1));

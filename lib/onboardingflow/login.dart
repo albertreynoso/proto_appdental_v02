@@ -44,24 +44,184 @@ class Login extends StatelessWidget {
       backgroundColor: Colors.white,
       resizeToAvoidBottomInset: true,
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SafeArea(
+        padding: const EdgeInsets.all(0.0),
+        
           child: SingleChildScrollView(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.start,
               children: [
-                /* Container(
-                  width: double.infinity,
-                  height: double.infinity,
-                  decoration: BoxDecoration(
-                    image: DecorationImage(
-                      image: CachedNetworkImageProvider(
-                        'https://i.ibb.co/RTnNCcYq/background-Inicio.png',
+                Stack(
+                  children: [
+                    Container(
+                      height: 350,
+                      decoration: BoxDecoration(
+                        image: DecorationImage(
+                          image: NetworkImage(
+                            'https://i.ibb.co/RTnNCcYq/background-Inicio.png',
+                          ),
+                          fit: BoxFit.cover,
+                        ),
                       ),
-                      fit: BoxFit.cover,
                     ),
+                    Positioned(
+                      top: 70,
+                      left: 20,
+                      child: Row(
+                        children: [
+                          /* Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 0),
+                            child: Image.asset(
+                              'assets/img/logo_no_bg.png',
+                              height: 50,
+                            ),
+                          ), */
+                          const Text(
+                            'DentLink.',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontFamily: 'Roboto',
+                              fontSize: 30,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 50,
+                      left: 20,
+                      child: Text(
+                        'Tu plataforma dental ',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                Padding(
+                  padding: const EdgeInsets.all(28.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      // Campo Email
+                      _ingresoEmail(),
+                      const SizedBox(height: 20),
+
+                      // Campo Password
+                      _ingresoPassword(),
+
+                      const SizedBox(height: 16),
+
+                      // Forgot password
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () {},
+                          child: const Text(
+                            '¿Olvidaste tu contraseña?',
+                            style: TextStyle(color: Colors.black54),
+                          ),
+                        ),
+                      ),
+
+                      // Línea divisoria
+                      const Divider(height: 1, color: Colors.grey),
+
+                      const SizedBox(height: 24),
+
+                      // Botón Login
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            //if (formKey.currentState!.validate()) {
+                            // Si todos los campos son válidos, procede con el envío
+                            await AuthService().signin(
+                              email: _emailController.text,
+                              password: _passwordController.text,
+                              context: context,
+                            );
+                            // }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text('Ingresar'),
+                        ),
+
+                        /* _botonIngreso(context, formKey), */
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Sign up link
+                      RichText(
+                        textAlign: TextAlign.center,
+                        text: TextSpan(
+                          children: [
+                            const TextSpan(
+                              text: "¿Nuevo usuario? ",
+                              style: TextStyle(color: Color(0xff6A6A6A)),
+                            ),
+                            TextSpan(
+                              text: "Registrarse",
+                              style: const TextStyle(
+                                color: Color(0xff1A1D1E),
+                                fontWeight: FontWeight.bold,
+                              ),
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => Signup(),
+                                    ),
+                                  );
+                                },
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Separador "or"
+                      const Row(
+                        children: [
+                          Expanded(child: Divider(color: Colors.grey)),
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16),
+                            child: Text(
+                              'o',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                          Expanded(child: Divider(color: Colors.grey)),
+                        ],
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Botones de login social
+                      _buildSocialButton(
+                        icon: Icons.g_mobiledata,
+                        text: 'Log in using Google',
+                        isSelected: false,
+                      ),
+                    ],
                   ),
-                ), */
+                ),
+
                 /* 
                   child: Stack(
                     children: [
@@ -105,127 +265,7 @@ class Login extends StatelessWidget {
                     ],
                   ),
                 ), */
-                const SizedBox(height: 40),
 
-                // Título
-                const Text(
-                  'Iniciar sesión',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                  ),
-                ),
-
-                const SizedBox(height: 40),
-
-                // Campo Email
-                _ingresoEmail(),
-                const SizedBox(height: 20),
-
-                // Campo Password
-                _ingresoPassword(),
-
-                const SizedBox(height: 16),
-
-                // Forgot password
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {},
-                    child: const Text(
-                      '¿Olvidaste tu contraseña?',
-                      style: TextStyle(color: Colors.black54),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Línea divisoria
-                const Divider(height: 1, color: Colors.grey),
-
-                const SizedBox(height: 24),
-
-                // Botón Login
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      //if (formKey.currentState!.validate()) {
-                      // Si todos los campos son válidos, procede con el envío
-                      await AuthService().signin(
-                        email: _emailController.text,
-                        password: _passwordController.text,
-                        context: context,
-                      );
-                      // }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text('Ingresar'),
-                  ),
-
-                  /* _botonIngreso(context, formKey), */
-                ),
-
-                const SizedBox(height: 24),
-
-                // Sign up link
-                RichText(
-                  textAlign: TextAlign.center,
-                  text: TextSpan(
-                    children: [
-                      const TextSpan(
-                        text: "¿Nuevo usuario? ",
-                        style: TextStyle(color: Color(0xff6A6A6A)),
-                      ),
-                      TextSpan(
-                        text: "Registrarse",
-                        style: const TextStyle(
-                          color: Color(0xff1A1D1E),
-                          fontWeight: FontWeight.bold,
-                        ),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => Signup()),
-                            );
-                          },
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                // Separador "or"
-                const Row(
-                  children: [
-                    Expanded(child: Divider(color: Colors.grey)),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text('o', style: TextStyle(color: Colors.grey)),
-                    ),
-                    Expanded(child: Divider(color: Colors.grey)),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // Botones de login social
-                _buildSocialButton(
-                  icon: Icons.g_mobiledata,
-                  text: 'Log in using Google',
-                  isSelected: false,
-                ),
                 /* Center(
                           child: Text(
                             'Hola Nuevamente',
@@ -247,7 +287,6 @@ class Login extends StatelessWidget {
               ],
             ),
           ),
-        ),
       ),
     );
   }
