@@ -12,7 +12,12 @@
           "package_name": "com.example.proto_appdental_v01"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "253456552287-2fknkd1p4lgnnu3o60cuedea2022904m.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBPMzomhl7u45TD0KknmB-3AxN_te-quV8"
@@ -20,7 +25,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "253456552287-2fknkd1p4lgnnu3o60cuedea2022904m.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     },
@@ -31,7 +41,20 @@
           "package_name": "com.example.proto_appdental_v02"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "253456552287-dtcc2k8qme062ejg6asfk75f3fer2nq2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.proto_appdental_v02",
+            "certificate_hash": "e264cd87106f9223f5ba15d5a7efe7a437ad2dbb"
+          }
+        },
+        {
+          "client_id": "253456552287-2fknkd1p4lgnnu3o60cuedea2022904m.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBPMzomhl7u45TD0KknmB-3AxN_te-quV8"
@@ -39,7 +62,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "253456552287-2fknkd1p4lgnnu3o60cuedea2022904m.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

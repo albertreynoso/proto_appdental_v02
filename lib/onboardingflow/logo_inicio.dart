@@ -18,6 +18,7 @@ class _LogoInicioState extends State<LogoInicio> {
   void _navigateToSignIn() {
     // Esperar 2 segundos y navegar a SignIn
     Future.delayed(const Duration(seconds: 2), () {
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => Login()),

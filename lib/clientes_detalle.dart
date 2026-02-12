@@ -1,100 +1,53 @@
 import 'package:flutter/material.dart';
-import 'views/empleado_añadir.dart';
 import 'views/tratamiendos.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'views/paciente_editar.dart';
 
-/// Widget de detalle de paciente
+/// Pantalla de detalle del paciente
 ///
-/// Muestra la información completa de un paciente en formato de perfil,
-/// con tabs para información, historial y documentos (expansible).
-class ClientesDetalle extends StatelessWidget {
-  /// Mapa con los datos del paciente a mostrar
+/// Muestra información completa del paciente con tabs para:
+/// - Historial médico
+/// - Tratamientos activos
+/// - Pagos realizados
+class ClientesDetalle extends StatefulWidget {
   final Map<String, dynamic> paciente;
 
-  /// Constructor
   const ClientesDetalle({Key? key, required this.paciente}) : super(key: key);
 
-  // Eliminado: late final double _anchoPantalla = _calcularAnchoPantalla(context);
+  @override
+  State<ClientesDetalle> createState() => _ClientesDetalleState();
+}
+
+class _ClientesDetalleState extends State<ClientesDetalle>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    late final double _anchoPantalla = _calcularAnchoPantalla(context);
     return Scaffold(
-      extendBodyBehindAppBar: false,
-      backgroundColor: Colors.grey[50],
-      appBar: _construirAppBar(context),
-      body: Container(
-        child: Column(
-          children: [_buildProfileHeader(), _buildTabsSection(context)],
-        ),
-      ),
-    );
-  }
-
-  // ================== APP BAR ==================
-  PreferredSizeWidget _construirAppBar(context) {
-    return PreferredSize(
-      preferredSize: const Size.fromHeight(56),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white, // Color sólido
-          // Puedes agregar un border o boxShadow si quieres una línea o sombra
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x11000000),
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: Row(
-            children: [
-              // Botón de retroceso
-              IconButton(
-                icon: const Icon(
-                  Icons.arrow_back_ios_rounded,
-                  color: Colors.black,
-                  size: 20,
-                ),
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'Detalle de Paciente',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              // ...otros widgets si necesitas
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ========== HEADER DE PERFIL COMPRIMIDO =============
-  Widget _buildProfileHeader() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      child: Row(
+      backgroundColor: const Color(0xFFF7F7F7),
+      appBar: _construirAppBar(),
+      body: Column(
         children: [
-          _buildAvatar(),
-          const SizedBox(width: 16),
+          _construirHeaderPaciente(),
+          const Divider(height: 0.5, thickness: 0.5),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildNombre(),
-                const SizedBox(height: 12),
-                _buildEstadoBadge(),
+                _construirTabBar(),
+                Expanded(child: _construirTabBarView()),
               ],
             ),
           ),
@@ -103,278 +56,339 @@ class ClientesDetalle extends StatelessWidget {
     );
   }
 
-  /// Avatar circular con iniciales del empleado
-  Widget _buildAvatar() {
-    return Container(
-      width: 80,
-      height: 80,
-      decoration: BoxDecoration(color: Colors.blue[50], shape: BoxShape.circle),
-      child: Center(
-        child: Text(
-          _obtenerIniciales(),
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.w600,
-            color: Colors.blue[700],
+  // ========== APP BAR ==========
+
+  PreferredSizeWidget _construirAppBar() {
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(56),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x0A000000),
+              blurRadius: 8,
+              offset: Offset(0, 1),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.arrow_back_ios_rounded,
+                    color: Colors.black,
+                    size: 14,
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                const Text(
+                  'Detalle del paciente',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.more_vert, color: Colors.black),
+                  onPressed: _mostrarMenuOpciones,
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  /// Nombre completo del empleado - Más compacto
-  Widget _buildNombre() {
-    return Text(
-      _obtenerNombreCompleto(),
-      style: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w600,
-        color: Colors.black87,
-        height: 1.2,
-      ),
-    );
-  }
+  // ========== HEADER DEL PACIENTE ==========
 
-  /// Badge de estado más compacto
-  Widget _buildEstadoBadge() {
-    final String estado = paciente['activo']
-        ? 'con tratamientos activos'
-        : 'sin tratamientos activos';
+  Widget _construirHeaderPaciente() {
+    final bool isActive = widget.paciente['activo'] ?? true;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: BoxDecoration(
-        color: _getColorEstado(estado).withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        estado.toUpperCase(),
-        style: TextStyle(
-          color: _getColorEstado(estado),
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-
-  // ========== SECCIÓN DE TABS =============
-  Widget _buildTabsSection(BuildContext context) {
-    return _buildTabsHeader(context);
-  }
-
-  Widget _buildTabsHeader(BuildContext context) {
-    final double anchoTab = 80.0;
-    final double _anchoPantalla = _calcularAnchoPantalla(context);
-    return DefaultTabController(
-      length: 3, // Número de tabs
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
       child: Column(
         children: [
-          TabBar(
-            isScrollable: true,
-            indicatorColor: Colors.blue,
-            labelColor: Colors.blue,
-            unselectedLabelColor: Colors.grey,
-            // Códigos para eliminar todo el espaciado
-            padding: EdgeInsets.zero, // Sin padding externo
-            labelPadding: EdgeInsets.zero, // Sin padding interno
-            indicatorPadding: EdgeInsets.zero, // Sin padding del indicador
-            tabs: [
-              SizedBox(
-                width: _anchoPantalla / 4,
-                child: Tab(text: 'Historial'),
-              ),
-              SizedBox(
-                width: _anchoPantalla / 4,
-                child: Tab(text: 'Tratamientos'),
-              ),
-              SizedBox(
-                width: _anchoPantalla / 4,
-                child: Tab(text: 'Pagos'),
-              ),
-            ],
-          ),
+          Row(
+            children: [
+              // Avatar
+              _construirAvatar(),
+              const SizedBox(width: 16),
 
-          LayoutBuilder(
-            builder: (context, constraints) {
-              return SizedBox(
-                height: MediaQuery.of(context).size.height * 0.7,
-                child: TabBarView(
+              // Información básica
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Aquí van los contenidos de cada tab
-                    _historialTab(context),
-                    _tratamientosTab(context, paciente),
-                    _pagosTab(context),
+                    Text(
+                      _obtenerNombreCompleto(),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(Icons.badge, size: 16, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Text(
+                          'DNI: ${widget.paciente['dni_cliente'] ?? 'No especificado'}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _construirEstadoBadge(isActive),
                   ],
                 ),
-              );
-            },
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  /// Contenido de la tab seleccionada (información personal)
-  Widget _buildTabContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Información Personal
-        const Text(
-          'Datos Personales',
-          style: TextStyle(
+  Widget _construirAvatar() {
+    return Container(
+      width: 70,
+      height: 70,
+      decoration: BoxDecoration(
+        color: Colors.green.withOpacity(0.1),
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Text(
+          _obtenerIniciales(),
+          style: const TextStyle(
+            fontSize: 26,
             fontWeight: FontWeight.bold,
-            fontSize: 16,
-            color: Colors.blue,
+            color: Colors.green,
           ),
-        ),
-        const SizedBox(height: 12),
-        _buildInfoItem('Nombres', paciente['nombre']?.toString() ?? ''),
-        _buildInfoItem(
-          'Apellido Paterno',
-          paciente['apellido_paterno']?.toString() ?? '',
-        ),
-        _buildInfoItem(
-          'Apellido Materno',
-          paciente['apellido_materno']?.toString() ?? '',
-        ),
-        _buildInfoItem('DNI', paciente['dni']?.toString() ?? ''),
-        _buildInfoItem('Edad', paciente['edad']?.toString() ?? ''),
-        _buildInfoItem('Género', paciente['genero']?.toString() ?? ''),
-        _buildInfoItem(
-          'Fecha de Nacimiento',
-          _formatearFecha(paciente['fecha_nacimiento']),
-        ),
-
-        const SizedBox(height: 16),
-
-        // Información de Contacto
-        const Text(
-          'Información de Contacto',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-            color: Colors.blue,
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildInfoItem('Dirección', paciente['direccion']?.toString() ?? ''),
-        _buildInfoItem(
-          'Teléfono',
-          paciente['numero_telefonico']?.toString() ?? '',
-        ),
-
-        // Información Personal
-        const Text(
-          'Datos Personales',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-            color: Colors.blue,
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildInfoItem('Nombres', paciente['nombre']?.toString() ?? ''),
-        _buildInfoItem(
-          'Apellido Paterno',
-          paciente['apellido_paterno']?.toString() ?? '',
-        ),
-        _buildInfoItem(
-          'Apellido Materno',
-          paciente['apellido_materno']?.toString() ?? '',
-        ),
-        _buildInfoItem('DNI', paciente['dni']?.toString() ?? ''),
-        _buildInfoItem('Edad', paciente['edad']?.toString() ?? ''),
-        _buildInfoItem('Género', paciente['genero']?.toString() ?? ''),
-        _buildInfoItem(
-          'Fecha de Nacimiento',
-          _formatearFecha(paciente['fecha_nacimiento']),
-        ),
-
-        const SizedBox(height: 16),
-
-        // Información de Contacto
-        const Text(
-          'Información de Contacto',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-            color: Colors.blue,
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildInfoItem('Dirección', paciente['direccion']?.toString() ?? ''),
-        _buildInfoItem(
-          'Teléfono',
-          paciente['numero_telefonico']?.toString() ?? '',
-        ),
-      ],
-    );
-  }
-
-  Widget _historialTab(BuildContext context) {
-    return Scaffold(
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: _buildTabContent(),
         ),
       ),
     );
   }
 
-  Widget _tratamientosTab(BuildContext context, Map<String, dynamic> paciente) {
-    return TratamiendosScreen(paciente: paciente);
-  }
-
-  Widget _pagosTab(BuildContext context) {
-    return Scaffold(
-      body: Center(child: Text('Contenido Pagos')),
-      //floatingActionButton: _botonFlotanteTratamientos(context),
+  Widget _construirEstadoBadge(bool isActive) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: isActive
+            ? const Color(0xFF10B981).withOpacity(0.1)
+            : Colors.grey.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: isActive ? const Color(0xFF10B981) : Colors.grey[400],
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isActive ? 'Con tratamiento' : 'Sin tratamiento',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: isActive ? const Color(0xFF10B981) : Colors.grey[600],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-
-
-
-  /// Construye el botón flotante para agregar empleado
-  Widget _botonFlotanteTratamientos(BuildContext context) {
-    return FloatingActionButton(
-      onPressed: () {
-        try {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => NuevoEmpleado(),
+  Widget _construirInfoCard(IconData icono, String label, String value) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F7F7),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icono, size: 16, color: Colors.grey[600]),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.black,
             ),
-          );
-          print('✅ Navegación exitosa');
-        } catch (e) {
-          print('❌ ERROR: $e');
-          // Fallback seguro
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => Scaffold(
-                appBar: AppBar(title: const Text('Error - Usando fallback')),
-                body: const Center(
-                  child: Text('Hubo un error, pero esto es seguro'),
-                ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ========== TABS ==========
+
+  Widget _construirTabBar() {
+    return Container(
+      color: Colors.white,
+      child: TabBar(
+        controller: _tabController,
+        labelColor: Colors.green,
+        unselectedLabelColor: Colors.grey[600],
+        indicatorColor: Colors.green,
+        indicatorWeight: 3,
+        labelStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        unselectedLabelStyle: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
+        tabs: const [
+          Tab(text: 'Información'),
+          Tab(text: 'Tratamientos'),
+          Tab(text: 'Historial'),
+        ],
+      ),
+    );
+  }
+
+  Widget _construirTabBarView() {
+    return TabBarView(
+      controller: _tabController,
+      children: [
+        _construirTabInformacion(),
+        _construirTabTratamientos(),
+        _construirTabHistorial(),
+      ],
+    );
+  }
+
+  // ========== TAB: INFORMACIÓN ==========
+
+  Widget _construirTabInformacion() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _construirSeccionInfo('Datos Personales', [
+            _construirItemInfo('Nombres', widget.paciente['nombre']),
+            _construirItemInfo(
+              'Apellido Paterno',
+              widget.paciente['apellido_paterno'],
+            ),
+            _construirItemInfo(
+              'Apellido Materno',
+              widget.paciente['apellido_materno'],
+            ),
+            _construirItemInfo('DNI', widget.paciente['dni_cliente']),
+            _construirItemInfo('Sexo', widget.paciente['sexo']),
+            _construirItemInfo(
+              'Fecha de Nacimiento',
+              _formatearFecha(widget.paciente['fecha_nacimiento']),
+            ),
+            _construirItemInfo(
+              'Edad',
+              '${widget.paciente['edad'] ?? 'N/A'} años',
+            ),
+            _construirItemInfo('Estado Civil', widget.paciente['estado_civil']),
+            _construirItemInfo('Ocupación', widget.paciente['ocupacion']),
+          ]),
+
+          const SizedBox(height: 24),
+
+          _construirSeccionInfo('Información de Contacto', [
+            _construirItemInfo('Celular', widget.paciente['celular']),
+            _construirItemInfo(
+              'Teléfono Fijo',
+              widget.paciente['telefono_fijo'],
+            ),
+            _construirItemInfo('Email', widget.paciente['email']),
+          ]),
+
+          const SizedBox(height: 24),
+
+          _construirSeccionInfo('Domicilio', [
+            _construirItemInfo('Dirección', widget.paciente['direccion']),
+            _construirItemInfo(
+              'Distrito',
+              widget.paciente['distrito_direccion'],
+            ),
+            _construirItemInfo(
+              'Lugar de Procedencia',
+              widget.paciente['lugar_procedencia'],
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _construirSeccionInfo(String titulo, List<Widget> items) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              titulo,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
               ),
             ),
-          );
-        }
-      }, //_navegarACrearEmpleado,
-      tooltip: 'Agregar empleado',
-      backgroundColor: Colors.blue,
-      child: const Icon(Icons.medical_services, color: Colors.white, size: 25),
+          ),
+          const Divider(height: 1),
+          ...items,
+        ],
+      ),
     );
   }
-  /// Ítem de información con etiqueta y valor
-  Widget _buildInfoItem(String label, String value) {
+
+  Widget _construirItemInfo(String label, dynamic value) {
+    final String valorTexto = value?.toString() ?? 'No disponible';
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -383,16 +397,23 @@ class ClientesDetalle extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
+                fontSize: 14,
                 color: Colors.grey[600],
                 fontWeight: FontWeight.w500,
               ),
             ),
           ),
+          const SizedBox(width: 16),
           Expanded(
             flex: 3,
             child: Text(
-              value.isNotEmpty ? value : 'No disponible',
-              style: const TextStyle(fontWeight: FontWeight.w400),
+              valorTexto,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.black,
+                fontWeight: FontWeight.w400,
+              ),
+              textAlign: TextAlign.right,
             ),
           ),
         ],
@@ -400,65 +421,201 @@ class ClientesDetalle extends StatelessWidget {
     );
   }
 
-  // ========== MÉTODOS DE UTILIDAD Y FORMATEO ==========
+  // ========== TAB: TRATAMIENTOS ==========
 
-  double _calcularAnchoPantalla(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    return screenWidth; // Dividir entre número de días
+  Widget _construirTabTratamientos() {
+    return TratamiendosScreen(paciente: widget.paciente);
   }
 
-  /// Obtiene las iniciales del nombre completo
-  String _obtenerIniciales() {
-    final nombres = paciente['nombre']?.toString() ?? '';
-    final apellidoPaterno = paciente['apellido_paterno']?.toString() ?? '';
+  // ========== TAB: PAGOS ==========
 
-    if (nombres.isEmpty && apellidoPaterno.isEmpty) return '?';
-
-    String inicialNombre = nombres.isNotEmpty ? nombres[0].toUpperCase() : '';
-    String inicialApellido = apellidoPaterno.isNotEmpty
-        ? apellidoPaterno[0].toUpperCase()
-        : '';
-
-    return '$inicialNombre$inicialApellido';
+  Widget _construirTabHistorial() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text(
+            'Historial de citas',
+            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Próximamente',
+            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+          ),
+        ],
+      ),
+    );
   }
 
-  /// Construye el nombre completo a partir de los campos individuales
-  String _obtenerNombreCompleto() {
-    final nombres = paciente['nombre']?.toString() ?? '';
-    final apellidoPaterno = paciente['apellido_paterno']?.toString() ?? '';
-    final apellidoMaterno = paciente['apellido_materno']?.toString() ?? '';
+  // ========== MENÚ DE OPCIONES ==========
 
-    return '$nombres $apellidoPaterno $apellidoMaterno'.trim();
+  void _mostrarMenuOpciones() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                ListTile(
+                  leading: const Icon(Icons.edit_outlined),
+                  title: const Text('Editar información'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            PacienteEditar(paciente: widget.paciente),
+                      ),
+                    ).then((actualizado) {
+                      if (actualizado == true) {
+                        setState(() {});
+                      }
+                    });
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete_outline, color: Colors.red),
+                  title: const Text(
+                    'Eliminar paciente',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _confirmarEliminar();
+                  },
+                ),
+                SizedBox(height: MediaQuery.of(context).padding.bottom + 0),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
+  void _confirmarEliminar() {
+  showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('Eliminar Paciente'),
+        content: Text(
+          '¿Estás seguro de que deseas eliminar al paciente "${widget.paciente['nombre']}"?\n\nEsta acción no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.grey.shade800,
+            ),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _eliminarPaciente();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      );
+    },
+  );
+}
 
-  /// Devuelve el color correspondiente al estado
-  Color _getColorEstado(String estado) {
-    switch (estado.toLowerCase()) {
-      case 'con tratamientos activos':
-        return Colors.green;
-      case 'sin tratamientos activos':
-        return Colors.grey;
-      default:
-        return Colors.green;
+Future<void> _eliminarPaciente() async {
+  try {
+    await FirebaseFirestore.instance
+        .collection('pacientes')
+        .doc(widget.paciente['id'])
+        .delete();
+
+    if (mounted) {
+      _mostrarMensaje('Paciente eliminado exitosamente');
+      Navigator.pop(context, true);
+    }
+  } catch (e) {
+    if (mounted) {
+      _mostrarMensaje('Error al eliminar paciente: $e', esError: true);
     }
   }
+}
 
-  /// Formatea una fecha ISO string a formato legible
+void _mostrarMensaje(String mensaje, {bool esError = false}) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(mensaje),
+      backgroundColor: esError ? Colors.red : Colors.green,
+      behavior: SnackBarBehavior.floating,
+    ),
+  );
+}
+
+  // ========== UTILIDADES ==========
+
+  String _obtenerNombreCompleto() {
+    final nombre = widget.paciente['nombre']?.toString() ?? '';
+    final apellidoP = widget.paciente['apellido_paterno']?.toString() ?? '';
+    final apellidoM = widget.paciente['apellido_materno']?.toString() ?? '';
+    return '$nombre $apellidoP $apellidoM'.trim();
+  }
+
+  String _obtenerIniciales() {
+    final nombre = widget.paciente['nombre']?.toString() ?? '';
+    final apellido = widget.paciente['apellido_paterno']?.toString() ?? '';
+
+    if (nombre.isEmpty && apellido.isEmpty) return '?';
+
+    final inicialN = nombre.isNotEmpty ? nombre[0].toUpperCase() : '';
+    final inicialA = apellido.isNotEmpty ? apellido[0].toUpperCase() : '';
+
+    return '$inicialN$inicialA';
+  }
+
   String _formatearFecha(dynamic fechaInput) {
     if (fechaInput == null) return 'No disponible';
 
     try {
-      String fechaString;
+      DateTime fecha;
 
       if (fechaInput is String) {
-        fechaString = fechaInput;
+        fecha = DateTime.parse(fechaInput);
       } else if (fechaInput is DateTime) {
-        fechaString = fechaInput.toIso8601String();
+        fecha = fechaInput;
+      } else if (fechaInput is Timestamp) {
+        // Agregar este caso
+        fecha = (fechaInput as Timestamp).toDate();
       } else {
         return fechaInput.toString();
       }
 
-      final fecha = DateTime.parse(fechaString);
       return '${fecha.day.toString().padLeft(2, '0')}/${fecha.month.toString().padLeft(2, '0')}/${fecha.year}';
     } catch (e) {
       return fechaInput.toString();

@@ -2,39 +2,18 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:proto_appdental_v02/modals/citas_modal.dart';
 
-// ======================================================================
-// CALENDARIO SCREEN - PANTALLA PRINCIPAL DEL CALENDARIO MÉDICO
-// ======================================================================
-
-/// Pantalla principal que muestra un calendario interactivo para gestión de citas médicas.
-///
-/// CARACTERÍSTICAS PRINCIPALES:
-/// - Vista de 3 días con slots horarios de 30 minutos
-/// - Línea de tiempo en tiempo real que muestra la hora actual
-/// - Gestión visual de citas con duraciones variables
-/// - Navegación entre fechas y selección de slots
-/// - Integración con Firestore para persistencia de datos
 class CalendarioScreen extends StatefulWidget {
   const CalendarioScreen({super.key});
 
   @override
   State<CalendarioScreen> createState() => _CalendarioScreenState();
 }
-
-// ======================================================================
-// ESTADO DEL CALENDARIO - LÓGICA PRINCIPAL
-// ======================================================================
-
 class _CalendarioScreenState extends State<CalendarioScreen> {
-  // ================================
-  // CONFIGURACIÓN Y CONSTANTES
-  // ================================
-
   bool _scrollInicializado = false;
 
-  /// Horarios disponibles para agendar citas (formato HH:MM)
   static const List<String> _horariosDisponibles = [
     '06:00',
     '06:30',
@@ -70,9 +49,10 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     '21:30',
     '22:00',
     '22:30',
+    '23:00',
+    '23:30',
   ];
 
-  /// Nombres de meses para mostrar en la interfaz
   static const List<String> _nombresMeses = [
     'Enero',
     'Febrero',
@@ -88,7 +68,6 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     'Diciembre',
   ];
 
-  /// Configuración de días visibles y nombres de días
   static const int _diasVisibles = 3;
   static const Map<int, String> _nombresDias = {
     1: 'Lun',
@@ -100,90 +79,145 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     7: 'Dom',
   };
 
-  // ================================
-  // ESTADO DE LA APLICACIÓN
-  // ================================
 
-  DateTime _fechaActual = DateTime.now(); // Fecha actualmente visualizada
-  DateTime _horaActual = DateTime.now(); // Hora actual para línea de tiempo
-  Timer? _timer; // Timer para actualizaciones en tiempo real
-  bool _cargandoCitas = false; // Estado de carga de citas
+  DateTime _fechaActual = DateTime.now(); 
+  DateTime _horaActual = DateTime.now(); 
+  Timer? _timer;
+  bool _primeraCarga = true; 
+  bool _mostrarCalendarioMensual = false;
+  final Set<String> _fechasCargadas =
+      {}; 
+  double _dragOffset = 0.0;
+  DateTime? _fechaPreview;
 
   final Map<String, List<Map<String, dynamic>>> _citasPorFecha =
-      {}; // Almacenamiento de citas por fecha
+      {}; 
   final ScrollController _controladorScrollVertical =
-      ScrollController(); // Control de scroll vertical
+      ScrollController();
 
-  late final double _alturaHora =
-      _calcularAltoFilas(); // Altura dinámica de slots horarios
-  late final double _anchoColumna =
-      _calcularAnchoColumnas(); // Ancho dinámico de columnas de días
-
-  // ================================
-  // CICLO DE VIDA DEL WIDGET
-  // ================================
+  double _alturaHora = 0; 
+  double _anchoColumna = 0; 
 
   @override
   void initState() {
     super.initState();
-    _cargarCitas();
     _iniciarTimerTiempoReal();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _centrarEnHoraActual();
+      _cargarCitas().then((_) {
+        _precargarCitasAdyacentes();
+      });
     });
   }
 
   @override
   void dispose() {
-    _timer?.cancel(); // Limpieza del timer para evitar fugas de memoria
+    _timer?.cancel();
     super.dispose();
   }
-
-  // ================================
-  // MÉTODOS PRINCIPALES DE INTERFAZ
-  // ================================
-
   @override
   Widget build(BuildContext context) {
+    _anchoColumna = _calcularAnchoColumnas();
+    _alturaHora = _calcularAltoFilas();
+
+
+    if (_primeraCarga) {
+      _primeraCarga = false;
+      Future.microtask(() => _cargarCitas());
+    }
+
     final diasVisibles = _obtenerDiasVisibles();
     final posicionLinea = _calcularPosicionLineaTiempo();
     final hoyVisible = _esHoyVisible(diasVisibles);
 
     return Scaffold(
       appBar: _construirAppBar(),
-      body: _cargandoCitas
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                _construirHeaderCalendario(),
-                _construirCabeceraDias(diasVisibles),
-                Expanded(
-                  child: Scrollbar(
+      body: Column(
+        children: [
+          _construirHeaderCalendario(),
+          _construirCalendarioMensual(),
+          _construirCabeceraDias(diasVisibles),
+          Expanded(
+            child: GestureDetector(
+              onHorizontalDragStart: (DragStartDetails details) {
+                setState(() {
+                  _dragOffset = 0.0;
+                });
+              },
+              onHorizontalDragUpdate: (DragUpdateDetails details) {
+                setState(() {
+                  _dragOffset += details.delta.dx;
+
+
+                  final screenWidth = MediaQuery.of(context).size.width;
+                  final diasDesplazados = (_dragOffset / screenWidth * 3)
+                      .round();
+
+                  if (diasDesplazados != 0) {
+                    _fechaPreview = _fechaActual.subtract(
+                      Duration(days: diasDesplazados * _diasVisibles),
+                    );
+                  } else {
+                    _fechaPreview = null;
+                  }
+                });
+              },
+              onHorizontalDragEnd: (DragEndDetails details) {
+                final screenWidth = MediaQuery.of(context).size.width;
+                final threshold = screenWidth * 0.3;
+
+                if (_dragOffset.abs() > threshold) {
+                  if (_dragOffset > 0) {
+                    
+                    _diasAnteriores();
+                  } else {
+                    
+                    _diasSiguientes();
+                  }
+                }
+
+                setState(() {
+                  _dragOffset = 0.0;
+                  _fechaPreview = null;
+                });
+              },
+              child: AnimatedContainer(
+                duration: _dragOffset != 0
+                    ? Duration.zero
+                    : const Duration(milliseconds: 200),
+                transform: Matrix4.translationValues(_dragOffset, 0, 0),
+                child: Scrollbar(
+                  controller: _controladorScrollVertical,
+                  thumbVisibility: true,
+                  child: SingleChildScrollView(
                     controller: _controladorScrollVertical,
-                    thumbVisibility: true,
-                    child: SingleChildScrollView(
-                      controller: _controladorScrollVertical,
-                      child: Stack(
-                        children: [
-                          // NUEVA ESTRUCTURA
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _construirColumnaHoras(),
-                              _construirGrillaDias(
-                                diasVisibles,
-                              ), // ← ESTE ES EL NUEVO
-                            ],
-                          ),
-                          if (hoyVisible && posicionLinea >= 0)
-                            _construirLineaTiempoActual(posicionLinea),
-                        ],
-                      ),
+                    physics: const ClampingScrollPhysics(),
+                    child: Stack(
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _construirColumnaHoras(),
+                            _construirGrillaDias(
+                              _fechaPreview != null
+                                  ? _obtenerDiasVisiblesDesde(_fechaPreview!)
+                                  : diasVisibles,
+                            ),
+                          ],
+                        ),
+                        if (hoyVisible &&
+                            posicionLinea >= 0 &&
+                            _fechaPreview == null)
+                          _construirLineaTiempoActual(posicionLinea),
+                      ],
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _mostrarDialogoAgregarEvento(_fechaActual, '09:00'),
         tooltip: 'Agregar cita',
@@ -192,11 +226,6 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     );
   }
 
-  // ================================
-  // COMPONENTES DE INTERFAZ PRINCIPALES
-  // ================================
-
-  /// AppBar personalizado con branding de la aplicación
   PreferredSizeWidget _construirAppBar() {
     return PreferredSize(
       preferredSize: const Size.fromHeight(56),
@@ -235,74 +264,121 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     );
   }
 
-  /// Header del calendario con controles de navegación
-  Widget _construirHeaderCalendario() {
-    return SafeArea(
-      bottom: false,
-      child: Container(
-        height: kToolbarHeight,
-        decoration: BoxDecoration(
-          color: Colors.white70,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black26,
-              blurRadius: 1,
-              offset: Offset(0, 0.5),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Expanded(
+  Widget _construirCalendarioMensual() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      height: _mostrarCalendarioMensual ? 340 : 0,
+      curve: Curves.easeInOut,
+      child: _mostrarCalendarioMensual
+          ? Material(
+              color: Colors.white,
+              elevation: 2,
+              child: Theme(
+                data: Theme.of(context).copyWith(
+                  colorScheme: ColorScheme.light(
+                    primary: Colors.blue,
+                    onPrimary: Colors.white,
+                    surface: Colors.white,
+                    onSurface: Colors.black,
+                  ),
+                ),
+                child: CalendarDatePicker(
+                  initialDate: _fechaActual,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(2030),
+                  onDateChanged: (DateTime newDate) {
+                    setState(() {
+                      _fechaActual = newDate;
+                      _mostrarCalendarioMensual = false;
+                    });
+                    _cargarCitas();
+                  },
+                ),
+              ),
+            )
+          : const SizedBox.shrink(),
+    );
+  }
+  
+Widget _construirHeaderCalendario() {
+  return SafeArea(
+    bottom: false,
+    child: Container(
+      height: kToolbarHeight,
+      decoration: BoxDecoration(
+        color: Colors.white70,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 1,
+            offset: Offset(0, 0.5),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _mostrarCalendarioMensual = !_mostrarCalendarioMensual;
+                });
+              },
               child: Padding(
                 padding: const EdgeInsets.only(left: 16.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      _obtenerMesAnio(_fechaActual),
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _obtenerMesAnio(_fechaActual),
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      _mostrarCalendarioMensual 
+                          ? Icons.expand_less 
+                          : Icons.expand_more,
+                      color: Colors.black,
                     ),
                   ],
                 ),
               ),
             ),
-            _construirControlesNavegacion(),
-          ],
-        ),
+          ),
+          _construirControlesNavegacion(),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
-  /// Controles de navegación para el calendario
-  Widget _construirControlesNavegacion() {
-    return Row(
-      children: [
-        IconButton(
-          icon: const Icon(Icons.today, color: Colors.black),
-          onPressed: _mostrarSelectorFechas,
-          tooltip: 'Otras fechas',
-        ),
-        IconButton(
-          icon: const Icon(Icons.chevron_left, color: Colors.black),
-          onPressed: _diasAnteriores,
-          tooltip: 'Días anteriores',
-        ),
-        IconButton(
-          icon: const Icon(Icons.chevron_right, color: Colors.black),
-          onPressed: _diasSiguientes,
-          tooltip: 'Días siguientes',
-        ),
-      ],
-    );
-  }
+Widget _construirControlesNavegacion() {
+  return Row(
+    children: [
+      IconButton(
+        icon: const Icon(Icons.chevron_left, color: Colors.black),
+        onPressed: _diasAnteriores,
+        tooltip: 'Días anteriores',
+      ),
+      IconButton(
+        icon: const Icon(Icons.chevron_right, color: Colors.black),
+        onPressed: _diasSiguientes,
+        tooltip: 'Días siguientes',
+      ),
+    ],
+  );
+}
 
-  /// Cabecera con los días de la semana visibles
   Widget _construirCabeceraDias(List<DateTime> diasVisibles) {
     return Container(
       decoration: BoxDecoration(
@@ -310,7 +386,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
       ),
       child: Row(
         children: [
-          const SizedBox(width: 50), // Espacio para columna de horas
+          const SizedBox(width: 50), 
           Expanded(
             child: Row(
               children: diasVisibles
@@ -328,7 +404,6 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     );
   }
 
-  /// Columna lateral con las horas del día
   Widget _construirColumnaHoras() {
     return Container(
       width: 50,
@@ -351,7 +426,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
                 ),
                 child: Text(
                   entry.value,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 11),
                 ),
               );
             })
@@ -360,17 +435,13 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     );
   }
 
-  /// Grilla principal con los días y slots horarios
   Widget _construirGrillaDias(List<DateTime> diasVisibles) {
     return Expanded(
       child: SizedBox(
         width: 3 * _anchoColumna,
         child: Stack(
-          // ← CAMBIAR A STACK
           children: [
-            // Fondo de la grilla con slots
             _construirFondoGrilla(diasVisibles),
-            // CITAS SOBREPUESTAS que abarcan múltiples slots
             ..._construirCitasExtendidas(diasVisibles),
           ],
         ),
@@ -378,7 +449,6 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     );
   }
 
-  /// Construye la grilla base con todos los slots vacíos
   Widget _construirFondoGrilla(List<DateTime> diasVisibles) {
     return ListView.builder(
       physics: const NeverScrollableScrollPhysics(),
@@ -390,7 +460,6 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
           height: _alturaHora,
           child: Column(
             children: [
-              // Primera media hora
               Expanded(
                 child: Row(
                   children: List.generate(
@@ -403,7 +472,6 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
                   ),
                 ),
               ),
-              // Segunda media hora
               Expanded(
                 child: Row(
                   children: List.generate(
@@ -423,49 +491,125 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     );
   }
 
-  /// Construye widgets de citas que se extienden sobre múltiples slots
   List<Widget> _construirCitasExtendidas(List<DateTime> diasVisibles) {
     final List<Widget> citasWidgets = [];
 
     for (final dia in diasVisibles) {
       final fechaStr = _formatearFecha(dia);
-      final citasDelDia = _citasPorFecha[fechaStr] ?? [];
+      final citasDelDia =
+          List<Map<String, dynamic>>.from(_citasPorFecha[fechaStr] ?? [])
+            ..removeWhere(
+              (cita) =>
+                  (cita['estado'] as String?)?.toLowerCase() == 'cancelada',
+            );
+
+      citasDelDia.sort((a, b) => a['hora_inicio'].compareTo(b['hora_inicio']));
+
+      final List<DateTimeRange?> ocupaciones = [null, null, null, null];
 
       for (final cita in citasDelDia) {
-        final widgetCita = _construirCitaExtendida(dia, cita);
-        if (widgetCita != null) {
-          citasWidgets.add(widgetCita);
+        final inicio = _parsearHora(cita['hora_inicio']);
+        final fin = _parsearHora(cita['hora_fin']);
+        final rangoCita = DateTimeRange(start: inicio, end: fin);
+
+        for (int i = 0; i < ocupaciones.length; i++) {
+          final rango = ocupaciones[i];
+          if (rango != null && rango.end.isBefore(inicio)) {
+            ocupaciones[i] = null;
+          }
         }
+
+        int indiceAsignado = -1;
+        for (int i = 0; i < ocupaciones.length; i++) {
+          final rango = ocupaciones[i];
+          if (rango == null ||
+              rango.end.isAtSameMomentAs(inicio) ||
+              rango.end.isBefore(inicio)) {
+            indiceAsignado = i;
+            break;
+          }
+        }
+
+        if (indiceAsignado == -1) {
+          indiceAsignado = _buscarSlotConMenorSolapamiento(
+            ocupaciones,
+            rangoCita,
+          );
+        }
+        ocupaciones[indiceAsignado] = rangoCita;
+        final widgetCita = _construirCitaExtendida(
+          dia,
+          cita,
+          indiceEnSlot: indiceAsignado,
+          totalSlots: 4,
+        );
+
+        if (widgetCita != null) citasWidgets.add(widgetCita);
       }
     }
 
     return citasWidgets;
   }
 
-  Widget? _construirCitaExtendida(DateTime dia, Map<String, dynamic> cita) {
-    try {
-      final horaInicio = cita['hora_inicio'];
-      final horaFin = cita['hora_fin'];
-      final duracion = cita['duracion_minutos'] ?? 60;
+  int _buscarSlotConMenorSolapamiento(
+    List<DateTimeRange?> ocupaciones,
+    DateTimeRange nuevaCita,
+  ) {
+    double menorSolapamiento = double.infinity;
+    int indiceMenor = 0;
 
-      // 1. ENCONTRAR POSICIÓN VERTICAL (top)
-      final posicionTop = _calcularPosicionVertical(horaInicio);
+    for (int i = 0; i < ocupaciones.length; i++) {
+      final rango = ocupaciones[i];
+      if (rango == null) return i; 
+      final solapamiento = _calcularSolapamiento(rango, nuevaCita);
+      if (solapamiento < menorSolapamiento) {
+        menorSolapamiento = solapamiento;
+        indiceMenor = i;
+      }
+    }
+
+    return indiceMenor;
+  }
+
+  double _calcularSolapamiento(DateTimeRange a, DateTimeRange b) {
+    final inicio = a.start.isAfter(b.start) ? a.start : b.start;
+    final fin = a.end.isBefore(b.end) ? a.end : b.end;
+    return fin.isBefore(inicio)
+        ? 0
+        : fin.difference(inicio).inMinutes.toDouble();
+  }
+
+  DateTime _parsearHora(String hora) {
+    final partes = hora.split(':');
+    return DateTime(0, 1, 1, int.parse(partes[0]), int.parse(partes[1]));
+  }
+
+  Widget? _construirCitaExtendida(
+    DateTime dia,
+    Map<String, dynamic> cita, {
+    int indiceEnSlot = 0,
+    int totalSlots = 1,
+  }) {
+    try {
+      final duracion = cita['duracion_minutos'] ?? 60;
+      final posicionTop = _calcularPosicionVertical(cita['hora_inicio']);
       if (posicionTop == -1) return null;
 
-      // 2. CALCULAR ALTURA TOTAL
       final alturaTotal = _calcularAlturaCita(duracion);
 
-      // 3. ENCONTRAR POSICIÓN HORIZONTAL (left)
       final indexDia = _obtenerDiasVisibles().indexOf(dia);
+
       if (indexDia == -1) return null;
 
+      final anchoPorCita = (_anchoColumna - 2) / 4;
+
       final posicionLeft =
-          (indexDia * _anchoColumna); // 50 = ancho columna horas
+          (indexDia * _anchoColumna) + (anchoPorCita * indiceEnSlot);
 
       return Positioned(
         top: posicionTop,
         left: posicionLeft,
-        width: _anchoColumna - 2, // Un poco menos para el margen
+        width: anchoPorCita - 2,
         height: alturaTotal,
         child: _construirWidgetEventoExtendido(cita),
       );
@@ -475,74 +619,89 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     }
   }
 
-  /// Calcula la posición vertical (top) basada en la hora de inicio
   double _calcularPosicionVertical(String horaInicio) {
     try {
       final indexHora = _horariosDisponibles.indexOf(horaInicio);
       if (indexHora == -1) return -1;
-
-      // Cada slot ocupa _alturaHora/2 de altura (30 minutos)
       return (indexHora / 2) * _alturaHora;
     } catch (e) {
       return -1;
     }
   }
 
-  /// Calcula la altura total que debe ocupar la cita
   double _calcularAlturaCita(int duracionMinutos) {
-    // Cada 30 minutos = _alturaHora/2 de altura
     final slotsOcupados = duracionMinutos / 30.0;
     return slotsOcupados * (_alturaHora / 2);
   }
 
+  Color _obtenerColorPorEstado(String? estado) {
+    switch (estado?.toLowerCase()) {
+      case 'pendiente':
+        return const Color(0xFFF59E0B);
+      case 'confirmada':
+        return const Color(0xFF10B981);
+      case 'completada':
+        return const Color(0xFF6B7280);
+      case 'reprogramada':
+        return const Color(0xFFF97316);
+      case 'cancelada':
+        return const Color(0xFFEF4444);
+      default:
+        return const Color(0xFF10B981);
+    }
+  }
+
   Widget _construirWidgetEventoExtendido(Map<String, dynamic> cita) {
+    final color = _obtenerColorPorEstado(cita['estado']);
+    final duracion = cita['duracion_minutos'] ?? 60;
+    final bool mostrarDetalles = duracion >= 30;
+
     return GestureDetector(
       onTap: () => _mostrarDetallesCita(cita),
       child: Container(
-        margin: const EdgeInsets.all(1),
-        padding: const EdgeInsets.all(6),
+        margin: const EdgeInsets.only(right: 1, bottom: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
         decoration: BoxDecoration(
-          color: cita['color'] ?? Colors.blue,
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.white, width: 1.5),
+          color: color,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.2),
-              blurRadius: 3,
-              offset: const Offset(0, 2),
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
             ),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: [
-            // Nombre del paciente
-            Text(
-              cita['nombre_paciente'] ?? 'Paciente',
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-
-            const SizedBox(height: 2),
-
-            // Tratamiento
-            Text(
-              cita['tratamiento'] ?? 'Consulta',
-              style: TextStyle(
-                fontSize: 9,
-                color: Colors.white.withOpacity(0.8),
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
+        child: mostrarDetalles
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    cita['nombre_paciente'] ?? 'Paciente',
+                    style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      height: 1.1,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (duracion >= 60)
+                    Text(
+                      cita['tratamiento'] ?? '',
+                      style: TextStyle(
+                        fontSize: 8,
+                        color: Colors.white.withValues(alpha: 0.85),
+                        height: 1.1,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              )
+            : null,
       ),
     );
   }
@@ -563,12 +722,11 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
       ),
       child: GestureDetector(
         onTap: () => _mostrarDialogoAgregarEvento(date, horaCompleta),
-        child: Container(), // Slot vacío pero clickeable
+        child: Container(), 
       ),
     );
   }
 
-  /// Encabezado individual para cada día
   Widget _construirEncabezadoDia(DateTime date) {
     final isToday = _esMismoDia(date, DateTime.now());
     return Container(
@@ -602,110 +760,245 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     );
   }
 
-  /// Línea que indica la hora actual en el calendario
   Widget _construirLineaTiempoActual(double posicionVertical) {
     return Positioned(
       top: posicionVertical,
       left: 50,
       right: 0,
-      child: Container(
-        height: 1,
-        decoration: BoxDecoration(
-          color: Colors.blueGrey,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.blueGrey.withOpacity(0.5),
-              blurRadius: 2,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Container(color: Colors.grey),
-            Positioned(
-              left: -4,
-              top: -3,
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: Colors.grey,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.5),
-                      blurRadius: 4,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
+      child: Stack(
+        clipBehavior: Clip.none, 
+        children: [
+          Container(height: 1, color: Colors.red),
+          Positioned(
+            left: -6, 
+            top: -4,
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.5),
+                    blurRadius: 4,
+                    spreadRadius: 1,
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  // ================================
-  // LÓGICA DE GESTIÓN DE CITAS
-  // ================================
-
-  /// Carga citas desde Firestore o genera datos de ejemplo
   Future<void> _cargarCitas() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      print('⚠️ Usuario no autenticado, omitiendo carga de citas');
+      return;
+    }
+
     try {
-      if (_cargandoCitas) return;
+      for (int i = 0; i < _diasVisibles; i++) {
+        final dia = DateTime(
+          _fechaActual.year,
+          _fechaActual.month,
+          _fechaActual.day,
+        ).add(Duration(days: i));
 
-      setState(() => _cargandoCitas = true);
-      _citasPorFecha.clear();
+        final fechaStr = _formatearFecha(dia);
 
-      // NOTA: Actualmente usando datos de ejemplo
-      // Para usar Firestore, descomentar el código siguiente
-      final citasEjemplo = _generarCitasEjemplo();
-      _citasPorFecha.addAll(citasEjemplo);
+        if (_fechasCargadas.contains(fechaStr)) {
+          continue;
+        }
 
-      _debugCitas(); // Log de depuración
-      setState(() => _cargandoCitas = false);
+        final diaSiguiente = dia.add(const Duration(days: 1));
+
+        print('🔍 Consultando citas para: $fechaStr');
+
+        final snapshot = await FirebaseFirestore.instance
+            .collection('citas')
+            .where('fecha', isGreaterThanOrEqualTo: Timestamp.fromDate(dia))
+            .where('fecha', isLessThan: Timestamp.fromDate(diaSiguiente))
+            .get()
+            .timeout(
+              const Duration(seconds: 10),
+              onTimeout: () {
+                print('⏰ Timeout consultando citas para $fechaStr');
+                throw TimeoutException('Firestore timeout');
+              },
+            );
+
+        print('✅ ${snapshot.docs.length} citas encontradas para $fechaStr');
+
+        final citasDelDia = <Map<String, dynamic>>[];
+
+        for (var doc in snapshot.docs) {
+          final cita = doc.data();
+          final Timestamp? fechaTimestamp = cita['fecha'] as Timestamp?;
+          if (fechaTimestamp == null) continue;
+
+          final horaInicio = (cita['hora'] as String?) ?? '09:00';
+          final duracionMin =
+              int.tryParse(cita['duracion']?.toString() ?? '30') ?? 30;
+          final horaFin = _sumarMinutos(horaInicio, duracionMin);
+
+          citasDelDia.add({
+            'id': doc.id,
+            'nombre_paciente': cita['paciente_nombre'] ?? 'Sin nombre',
+            'hora_inicio': horaInicio,
+            'hora_fin': horaFin,
+            'duracion_minutos': duracionMin,
+            'estado': cita['estado'] ?? 'pendiente',
+            'tratamiento': cita['tipo_consulta'] ?? '',
+            'paciente_id': cita['paciente_id'] ?? '',
+            'es_tratamiento': cita['es_tratamiento'] ?? false,
+            'notas': cita['notas_observaciones'] ?? '',
+          });
+        }
+
+        if (mounted) {
+          setState(() {
+            _citasPorFecha[fechaStr] = citasDelDia;
+            _fechasCargadas.add(fechaStr);
+          });
+        }
+      }
+
+      _debugCitas();
     } catch (e) {
       print('❌ Error cargando citas: $e');
-      setState(() => _cargandoCitas = false);
-    }
-  }
-
-  /* CÓDIGO FIRESTORE (DESCOMENTAR PARA USAR)
-  Future<void> _cargarCitasFirestore() async {
-    final snapshot = await FirebaseFirestore.instance
-        .collection('citas')
-        .where('fecha_cita', isEqualTo: _formatearFecha(_fechaActual))
-        .get();
-
-    _citasPorFecha.clear();
-
-    for (var doc in snapshot.docs) {
-      final cita = doc.data();
-      final fechaCita = cita['fecha_cita'] ?? '';
-
-      if (fechaCita.isNotEmpty) {
-        _citasPorFecha.putIfAbsent(fechaCita, () => []).add({
-          'id': doc.id,
-          ...cita,
-          'hora_inicio': cita['hora_cita'] ?? '09:00',
-          'hora_fin': cita['hora_fin'] ?? '10:00',
-          'duracion_minutos': cita['duracion_minutos'] ?? 60,
-          'color': _obtenerColorTratamiento(cita['tratamiento']),
-        });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar citas: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
     }
-    setState(() {});
   }
-  */
 
-  // ================================
-  // MÉTODOS DE UTILIDAD Y LÓGICA
-  // ================================
+  Future<void> _precargarCitasAdyacentes() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
-  /// Inicia el timer para actualizar la hora actual
+    final diasAnteriores = DateTime(
+      _fechaActual.year,
+      _fechaActual.month,
+      _fechaActual.day,
+    ).subtract(const Duration(days: _diasVisibles));
+
+    final diasSiguientes = DateTime(
+      _fechaActual.year,
+      _fechaActual.month,
+      _fechaActual.day,
+    ).add(Duration(days: _diasVisibles * 2));
+
+    try {
+      for (int i = 0; i < _diasVisibles; i++) {
+        final dia = diasAnteriores.add(Duration(days: i));
+        final fechaStr = _formatearFecha(dia);
+
+        if (_fechasCargadas.contains(fechaStr)) continue;
+
+        final diaSiguiente = dia.add(const Duration(days: 1));
+
+        final snapshot = await FirebaseFirestore.instance
+            .collection('citas')
+            .where('fecha', isGreaterThanOrEqualTo: Timestamp.fromDate(dia))
+            .where('fecha', isLessThan: Timestamp.fromDate(diaSiguiente))
+            .get();
+
+        final citasDelDia = <Map<String, dynamic>>[];
+
+        for (var doc in snapshot.docs) {
+          final cita = doc.data();
+          final Timestamp? fechaTimestamp = cita['fecha'] as Timestamp?;
+          if (fechaTimestamp == null) continue;
+
+          final horaInicio = (cita['hora'] as String?) ?? '09:00';
+          final duracionMin =
+              int.tryParse(cita['duracion']?.toString() ?? '30') ?? 30;
+          final horaFin = _sumarMinutos(horaInicio, duracionMin);
+
+          citasDelDia.add({
+            'id': doc.id,
+            'nombre_paciente': cita['paciente_nombre'] ?? 'Sin nombre',
+            'hora_inicio': horaInicio,
+            'hora_fin': horaFin,
+            'duracion_minutos': duracionMin,
+            'estado': cita['estado'] ?? 'pendiente',
+            'tratamiento': cita['tipo_consulta'] ?? '',
+            'paciente_id': cita['paciente_id'] ?? '',
+            'es_tratamiento': cita['es_tratamiento'] ?? false,
+            'notas': cita['notas_observaciones'] ?? '',
+          });
+        }
+
+        if (mounted) {
+          setState(() {
+            _citasPorFecha[fechaStr] = citasDelDia;
+            _fechasCargadas.add(fechaStr);
+          });
+        }
+      }
+
+      for (int i = 0; i < _diasVisibles; i++) {
+        final dia = diasSiguientes.add(Duration(days: i));
+        final fechaStr = _formatearFecha(dia);
+
+        if (_fechasCargadas.contains(fechaStr)) continue;
+
+        final diaSiguiente = dia.add(const Duration(days: 1));
+
+        final snapshot = await FirebaseFirestore.instance
+            .collection('citas')
+            .where('fecha', isGreaterThanOrEqualTo: Timestamp.fromDate(dia))
+            .where('fecha', isLessThan: Timestamp.fromDate(diaSiguiente))
+            .get();
+
+        final citasDelDia = <Map<String, dynamic>>[];
+
+        for (var doc in snapshot.docs) {
+          final cita = doc.data();
+          final Timestamp? fechaTimestamp = cita['fecha'] as Timestamp?;
+          if (fechaTimestamp == null) continue;
+
+          final horaInicio = (cita['hora'] as String?) ?? '09:00';
+          final duracionMin =
+              int.tryParse(cita['duracion']?.toString() ?? '30') ?? 30;
+          final horaFin = _sumarMinutos(horaInicio, duracionMin);
+
+          citasDelDia.add({
+            'id': doc.id,
+            'nombre_paciente': cita['paciente_nombre'] ?? 'Sin nombre',
+            'hora_inicio': horaInicio,
+            'hora_fin': horaFin,
+            'duracion_minutos': duracionMin,
+            'estado': cita['estado'] ?? 'pendiente',
+            'tratamiento': cita['tipo_consulta'] ?? '',
+            'paciente_id': cita['paciente_id'] ?? '',
+            'es_tratamiento': cita['es_tratamiento'] ?? false,
+            'notas': cita['notas_observaciones'] ?? '',
+          });
+        }
+
+        if (mounted) {
+          setState(() {
+            _citasPorFecha[fechaStr] = citasDelDia;
+            _fechasCargadas.add(fechaStr);
+          });
+        }
+      }
+    } catch (e) {
+      print('❌ Error pre-cargando citas adyacentes: $e');
+    }
+  }
+
   void _iniciarTimerTiempoReal() {
     _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (mounted) {
@@ -714,11 +1007,10 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     });
   }
 
-  /// Calcula la posición vertical de la línea de tiempo
   double _calcularPosicionLineaTiempo() {
     final now = _horaActual;
     final startOfDay = DateTime(now.year, now.month, now.day, 6, 0);
-    final endOfDay = DateTime(now.year, now.month, now.day, 23, 0);
+    final endOfDay = DateTime(now.year, now.month, now.day, 23, 30);
 
     if (now.isBefore(startOfDay) || now.isAfter(endOfDay)) return -1;
 
@@ -729,10 +1021,6 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
 
     return progress * alturaTotal;
   }
-
-  // ================================
-  // MÉTODOS DE NAVEGACIÓN
-  // ================================
 
   void _mostrarDetallesCita(Map<String, dynamic> cita) {
     showDialog(
@@ -760,35 +1048,6 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     );
   }
 
-  void _mostrarSelectorFechas() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Seleccionar Fecha'),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 400,
-          child: CalendarDatePicker(
-            initialDate: _fechaActual,
-            firstDate: DateTime(2020),
-            lastDate: DateTime(2030),
-            onDateChanged: (DateTime newDate) {
-              setState(() => _fechaActual = newDate);
-              Navigator.of(context).pop();
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(onPressed: _irAHoy, child: const Text('Hoy')),
-        ],
-      ),
-    );
-  }
-
   void _mostrarDialogoAgregarEvento(DateTime fecha, String hora) {
     showModalBottomSheet(
       context: context,
@@ -806,7 +1065,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
                 'fecha': Timestamp.fromDate(datosAtencion['fecha']),
                 'fechaCreacion': Timestamp.now(),
               });
-              if (mounted) setState(() {});
+              if (mounted) _cargarCitas();
             } catch (e) {
               debugPrint('Error al guardar cita: $e');
             }
@@ -816,11 +1075,6 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     );
   }
 
-  // ================================
-  // MÉTODOS AUXILIARES
-  // ================================
-
-  // Métodos de utilidad compactados para mejor legibilidad
   bool _esHoyVisible(List<DateTime> diasVisibles) =>
       diasVisibles.any((dia) => _esMismoDia(dia, DateTime.now()));
   bool _esMismoDia(DateTime date1, DateTime date2) =>
@@ -831,6 +1085,10 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     _diasVisibles,
     (index) => _fechaActual.add(Duration(days: index)),
   );
+  List<DateTime> _obtenerDiasVisiblesDesde(DateTime fecha) => List.generate(
+  _diasVisibles,
+  (index) => fecha.add(Duration(days: index)),
+);
   String _obtenerMesAnio(DateTime fecha) =>
       '${_nombresMeses[fecha.month - 1]} ${fecha.year}';
   String _formatearFecha(DateTime fecha) =>
@@ -839,129 +1097,23 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
   double _calcularAnchoColumnas() => MediaQuery.of(context).size.width / 3.5;
   double _calcularAltoFilas() {
     final screenHeight = MediaQuery.of(context).size.height;
-    final appBarHeight = Scaffold.of(context).appBarMaxHeight ?? kToolbarHeight;
-    return (screenHeight - appBarHeight - 32) * 0.7 / 5;
+    return (screenHeight - kToolbarHeight - 32) * 0.7 / 5;
   }
 
-  void _irAHoy() => setState(() => _fechaActual = DateTime.now());
-  void _diasAnteriores() => setState(
-    () => _fechaActual = _fechaActual.subtract(
-      const Duration(days: _diasVisibles),
-    ),
-  );
-  void _diasSiguientes() => setState(
-    () => _fechaActual = _fechaActual.add(const Duration(days: _diasVisibles)),
-  );
+  void _diasAnteriores() {
+  setState(() => _fechaActual = _fechaActual.subtract(
+    const Duration(days: _diasVisibles),
+  ));
+  _cargarCitas().then((_) => _precargarCitasAdyacentes());
+}
 
-  // ================================
-  // MÉTODOS DE DATOS DE EJEMPLO
-  // ================================
+void _diasSiguientes() {
+  setState(() => _fechaActual = _fechaActual.add(
+    const Duration(days: _diasVisibles),
+  ));
+  _cargarCitas().then((_) => _precargarCitasAdyacentes());
+}
 
-  /// Genera citas de ejemplo para testing y demostración
-  Map<String, List<Map<String, dynamic>>> _generarCitasEjemplo() {
-    final citasEjemplo = <String, List<Map<String, dynamic>>>{};
-    final hoy = DateTime.now();
-
-    // Citas para hoy
-    citasEjemplo[_formatearFecha(hoy)] = [
-      _crearCitaEjemplo(
-        '1',
-        'María González',
-        '09:00',
-        '10:00',
-        60,
-        'Limpieza dental',
-        Colors.blue,
-      ),
-      _crearCitaEjemplo(
-        '2',
-        'Carlos López',
-        '11:30',
-        '12:30',
-        60,
-        'Consulta',
-        Colors.green,
-      ),
-      _crearCitaEjemplo(
-        '3',
-        'Ana Martínez',
-        '14:00',
-        '15:30',
-        90,
-        'Ortodoncia',
-        Colors.purple,
-      ),
-      _crearCitaEjemplo(
-        '4',
-        'Pedro Sánchez',
-        '16:00',
-        '16:30',
-        30,
-        'Extracción dental',
-        Colors.orange,
-      ),
-    ];
-
-    // Citas para días siguientes
-    citasEjemplo[_formatearFecha(hoy.add(const Duration(days: 1)))] = [
-      _crearCitaEjemplo(
-        '5',
-        'Laura Rodríguez',
-        '10:00',
-        '11:30',
-        90,
-        'Blanqueamiento',
-        Colors.teal,
-      ),
-    ];
-
-    citasEjemplo[_formatearFecha(hoy.add(const Duration(days: 2)))] = [
-      _crearCitaEjemplo(
-        '6',
-        'Jorge Fernández',
-        '08:30',
-        '09:00',
-        30,
-        'Revisión',
-        Colors.blueGrey,
-      ),
-      _crearCitaEjemplo(
-        '7',
-        'Sofía Herrera',
-        '15:00',
-        '16:30',
-        90,
-        'Implante dental',
-        Colors.green,
-      ),
-    ];
-
-    return citasEjemplo;
-  }
-
-  /// Helper para crear citas de ejemplo de forma consistente
-  Map<String, dynamic> _crearCitaEjemplo(
-    String id,
-    String paciente,
-    String inicio,
-    String fin,
-    int duracion,
-    String tratamiento,
-    Color color,
-  ) {
-    return {
-      'id': id,
-      'nombre_paciente': paciente,
-      'hora_inicio': inicio,
-      'hora_fin': fin,
-      'duracion_minutos': duracion,
-      'tratamiento': tratamiento,
-      'color': color,
-      'estado': 'confirmada',
-    };
-  }
-
-  /// Debug para ver las citas cargadas en consola
   void _debugCitas() {
     print('=== 🗓️ DEBUG CITAS CARGADAS ===');
     print('📊 Total de fechas: ${_citasPorFecha.length}');
@@ -977,26 +1129,18 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     print('================================\n');
   }
 
-  // ================================
-  // UTILIDADES DE MANEJO DE TIEMPO
-  // ================================
-
-  /// Centra el calendario en la hora actual automáticamente
   void _centrarEnHoraActual() {
     if (_scrollInicializado) return;
 
     try {
       final posicionLinea = _calcularPosicionLineaTiempo();
 
-      // Solo centrar si estamos viendo el día actual y la línea es visible
       final diasVisibles = _obtenerDiasVisibles();
       final hoyVisible = _esHoyVisible(diasVisibles);
 
       if (hoyVisible && posicionLinea >= 0) {
-        // Calcular la posición de scroll para centrar la línea
         final scrollOffset = _calcularOffsetScroll(posicionLinea);
 
-        // Animar el scroll suavemente a la posición
         _controladorScrollVertical.animateTo(
           scrollOffset,
           duration: const Duration(milliseconds: 800),
@@ -1013,20 +1157,15 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     }
   }
 
-  /// Calcula el offset de scroll necesario para centrar la línea de tiempo
   double _calcularOffsetScroll(double posicionLinea) {
     final viewportHeight =
         MediaQuery.of(context).size.height - kToolbarHeight * 2 - 32;
     final contenidoHeight = _alturaHora * (_horariosDisponibles.length / 2);
 
-    // Posición deseada: línea en el centro de la pantalla menos margen superior
     final posicionDeseada = posicionLinea - (viewportHeight / 2) + 100;
 
-    // Asegurar que no nos salgamos de los límites del scroll
     return posicionDeseada.clamp(0.0, contenidoHeight - viewportHeight);
   }
-
-  /// Suma minutos a una hora en formato string
   String _sumarMinutos(String hora, int minutos) {
     final parts = hora.split(':');
     int hour = int.parse(parts[0]);

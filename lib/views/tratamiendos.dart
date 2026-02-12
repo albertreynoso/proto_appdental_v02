@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:proto_appdental_v02/empleados_detalle_screen.dart';
-import 'package:proto_appdental_v02/views/tratamiento_a%C3%B1adir.dart';
+import 'package:proto_appdental_v02/modals/tratamiento_model.dart';
+import 'package:proto_appdental_v02/modals/cita_model.dart';
+import 'package:proto_appdental_v02/views/tratamiento_nuevo.dart';
+import 'package:proto_appdental_v02/views/tratamiento_detalle.dart';
 
 class TratamiendosScreen extends StatefulWidget {
   final Map<String, dynamic> paciente;
@@ -14,352 +17,322 @@ class TratamiendosScreen extends StatefulWidget {
 }
 
 class _TratamiendosScreenState extends State<TratamiendosScreen> {
-  // ========== VARIABLES DE ESTADO ==========
-
-  /// Lista de tratamientos obtenidos de Firestore
-  List<Map<String, dynamic>> _tratamientos = [];
-
-  /// Indica si los datos están siendo cargados
+  List<Tratamiento> _tratamientos = [];
   bool _isLoading = true;
-
-  /// Referencia a la colección de tratamientos en Firestore
-  static const String _collectionName = 'tratamientos';
-
-  // ========== CICLO DE VIDA DEL WIDGET ==========
 
   @override
   void initState() {
     super.initState();
+    initializeDateFormatting('es');
     _cargarTratamientos();
   }
 
-  // ========== MÉTODOS DE DATOS ==========
+  Future<void> _cargarTratamientos() async {
+    try {
+      setState(() => _isLoading = true);
 
-  /// Carga la lista de tratamientos desde Firestore
-Future<void> _cargarTratamientos() async {
-  try {
-    setState(() => _isLoading = true);
+      final snapshot = await FirebaseFirestore.instance
+          .collection('tratamientos')
+          .where('paciente_id', isEqualTo: widget.paciente['id'])
+          .get();
 
-    final snapshot = await FirebaseFirestore.instance
-        .collection(_collectionName)
-        .where('dni_paciente', isEqualTo: widget.paciente['dni_cliente']) // ← Filtro por DNI
-        //.orderBy('fecha_creacion', descending: true)
-        .get();
+      final List<Tratamiento> tratamientosList = snapshot.docs
+          .map((doc) => Tratamiento.fromFirestore(doc))
+          .toList();
 
-    final List<Map<String, dynamic>> tratamientosList = snapshot.docs
-        .map(
-          (DocumentSnapshot doc) => {
-            'id': doc.id,
-            ...doc.data() as Map<String, dynamic>,
-          },
-        )
-        .toList();
+      // Ordenar por fecha de creación descendente
+      tratamientosList.sort(
+        (a, b) => b.fechaCreacion.compareTo(a.fechaCreacion),
+      );
 
-    if (mounted) {
-      setState(() {
-        _tratamientos = tratamientosList;
-        _isLoading = false;
-      });
-    }
-  } catch (e) {
-    if (mounted) {
-      setState(() => _isLoading = false);
-      _mostrarMensajeError('Error al cargar tratamientos: $e');
+      if (mounted) {
+        setState(() {
+          _tratamientos = tratamientosList;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _mostrarMensajeError('Error al cargar tratamientos: $e');
+      }
     }
   }
-}
-
-  // ========== MÉTODOS DE UI ==========
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: false, // Asegúrate de que esté en false
       backgroundColor: const Color(0xFFF7F7F7),
-      body: _buildBody(_tratamientos),
-      floatingActionButton: _buildFloatingActionButton(
-        context,
-        widget.paciente,
-      ),
+      body: _buildBody(),
+      floatingActionButton: _buildFloatingActionButton(),
     );
   }
 
-  /// Construye el cuerpo principal de la pantalla
-  Widget _buildBody(List<Map<String, dynamic>> tratamientosFiltrados) {
-    return Column(
-      children: [
-        // Lista de tratamientos
-        Expanded(child: _buildListaTratamientos(tratamientosFiltrados)),
-      ],
-    );
-  }
-
-  /// Construye la lista de tratamientos
-  Widget _buildListaTratamientos(
-    List<Map<String, dynamic>> tratamientosFiltrados,
-  ) {
+  Widget _buildBody() {
     if (_isLoading) {
-      return _buildLoadingWidget();
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Cargando tratamientos...',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
     }
 
-    if (tratamientosFiltrados.isEmpty) {
-      return _construirWidgetEstadoVacio();
+    if (_tratamientos.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.medical_services_outlined,
+              size: 64,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No hay tratamientos registrados',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Los planes de tratamiento del paciente aparecerán aquí',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
     }
 
     return RefreshIndicator(
       onRefresh: _cargarTratamientos,
       child: ListView.builder(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        itemCount: tratamientosFiltrados.length,
+        padding: const EdgeInsets.all(16),
+        itemCount: _tratamientos.length,
         itemBuilder: (context, index) {
-          final tratamiento = tratamientosFiltrados[index];
-          return _construirTratamientoCard(tratamiento);
+          return _buildTratamientoCard(_tratamientos[index]);
         },
       ),
     );
   }
 
-  /// Widget de carga
-  Widget _buildLoadingWidget() {
-    return const Center(
+  Widget _buildTratamientoCard(Tratamiento tratamiento) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text(
-            'Cargando tratamientos...',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Widget para estado vacío
-  Widget _construirWidgetEstadoVacio() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.medical_services_outlined,
-            size: 64,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No hay tratamientos registrados',
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
+          // Header del tratamiento
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                topRight: Radius.circular(12),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.medical_services,
+                      color: Colors.grey.shade800,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        tratamiento.tratamiento,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
+                    _buildEstadoBadge(tratamiento.estado),
+                    if (tratamiento.pagado) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.green[600],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          'Pagado',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
             ),
           ),
-        ],
-      ),
-    );
-  }
 
-  Widget _construirTratamientoCard(Map<String, dynamic> tratamiento) {
-    final bool isActive = tratamiento['activo'] ?? true;
+          // Separador entre header y cuerpo
+          Divider(height: 1, thickness: 1, color: Colors.grey[200]),
 
-    return Card(
-      color: Colors.white,
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            // Avatar/Icono del tratamiento
-            _buildAvatarTratamiento(),
-
-            const SizedBox(width: 12),
-
-            // Información del tratamiento - MODIFICADO
-            Expanded(
+          // Cuerpo del tratamiento con fondo blanco Y BORDES INFERIORES REDONDOS
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white, // Fondo blanco
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(12),
+                bottomRight: Radius.circular(12),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Nombre completo (primer nombre + primer apellido)
+                  // Diagnóstico
                   Text(
-                    '${tratamiento['tratamiento'] ?? 'No disponible'}',
-                    //_obtenerNombreCompletoCorto(tratamiento),
+                    'Diagnóstico:',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: Colors.black,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.grey.shade300,
+                        width: 0.5,
+                      ),
+                    ),
+                    child: Text(
+                      tratamiento.diagnostico,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.black87,
+                      ),
                     ),
                   ),
 
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 20),
 
-                  // Estado tratamiento
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.calendar_today,
-                        size: 16,
-                        color: Colors.grey[700],
+                  // Botón Ver Detalle Completo
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => TratamientoDetalle(
+                              tratamiento: tratamiento,
+                              paciente: widget.paciente,
+                            ),
+                          ),
+                        ).then((_) => _cargarTratamientos());
+                      },
+                      icon: const Icon(Icons.visibility),
+                      label: const Text('Ver Detalle'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: BorderSide(color: Colors.grey!),
+                        foregroundColor: Colors.green,
+                        backgroundColor: Colors.white,
                       ),
-                      SizedBox(width: 4), // Espacio entre icono y texto
-                      Text(
-                        ' ${formatearFechaTimestamp(tratamiento['fecha_creacion'])} - ${isActive ? 'Actualidad' : formatearFechaTimestamp(tratamiento['fecha_finalizacion'])}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                          color: const Color.fromARGB(255, 58, 37, 37),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 4),
-
-                  // Estado activo/inactivo
-                  Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: Colors.green,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Estado: ${tratamiento['activo'] ? 'Activo' : 'Inactivo'}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
 
-            const SizedBox(width: 12),
+  Widget _buildEstadoBadge(String estado) {
+    Color color;
+    String texto;
 
-            // Acciones
-            _buildAccionesColumn(tratamiento),
-          ],
+    switch (estado.toLowerCase()) {
+      case 'activo':
+        color = Colors.green;
+        texto = 'Activo';
+        break;
+      case 'completado':
+        color = Colors.blue;
+        texto = 'Completado';
+        break;
+      case 'cancelado':
+        color = Colors.red;
+        texto = 'Cancelado';
+        break;
+      default:
+        color = Colors.grey;
+        texto = estado;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(
+        texto,
+        style: TextStyle(
+          color: Colors.grey.shade600,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
   }
 
-  /// Construye el avatar/icono del tratamiento
-  Widget _buildAvatarTratamiento() {
-    return Container(
-      width: 50,
-      height: 50,
-      decoration: BoxDecoration(shape: BoxShape.circle),
-      child: Icon(Icons.person, color: Colors.white, size: 24),
-    );
-  }
-
-  /// Construye la columna de acciones (editar y eliminar)
-  Widget _buildAccionesColumn(Map<String, dynamic> tratamiento) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [_construirBotonDetalle(tratamiento)],
-    );
-  }
-
-  Widget _construirBotonDetalle(Map<String, dynamic> tratamiento) {
-    return IconButton(
-      onPressed: () {
-        print('🚀 Intentando navegar...');
-
-        try {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => EmpleadosDetalle(empleado: tratamiento),
-            ),
-          );
-          print('✅ Navegación exitosa');
-        } catch (e) {
-          print('❌ ERROR: $e');
-          // Fallback seguro
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => Scaffold(
-                appBar: AppBar(title: const Text('Error - Usando fallback')),
-                body: const Center(
-                  child: Text('Hubo un error, pero esto es seguro'),
-                ),
-              ),
-            ),
-          );
-        }
-      },
-      icon: const Icon(Icons.chevron_right, color: Colors.grey, size: 26),
-    );
-  }
-
-  /// Construye el botón flotante para agregar empleado
-  Widget _buildFloatingActionButton(
-    BuildContext context,
-    Map<String, dynamic> paciente,
-  ) {
+  Widget _buildFloatingActionButton() {
     return FloatingActionButton(
       onPressed: () {
-        try {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => NuevoTratamiento(paciente: paciente),
-            ),
-          );
-          print('✅ Navegación exitosa');
-        } catch (e) {
-          print('❌ ERROR: $e');
-          // Fallback seguro
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => Scaffold(
-                appBar: AppBar(title: const Text('Error - Usando fallback')),
-                body: const Center(
-                  child: Text('Hubo un error, pero esto es seguro'),
-                ),
-              ),
-            ),
-          );
-        }
-      }, //_navegarACrearEmpleado,
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => NuevoTratamiento(paciente: widget.paciente),
+          ),
+        ).then((_) => _cargarTratamientos());
+      },
       tooltip: 'Agregar Tratamiento',
-      backgroundColor: Colors.blue,
-      child: const Icon(Icons.medical_services, color: Colors.white, size: 25),
+      backgroundColor: Colors.green,
+      child: const Icon(Icons.add, color: Colors.white, size: 28),
     );
   }
 
-  // ========== MÉTODOS DE UTILIDAD ==========
-
-  String formatearFechaTimestamp(Timestamp timestamp) {
-  try {
-    DateTime fecha = timestamp.toDate();
-    return DateFormat('dd/MM/yyyy').format(fecha);
-  } catch (e) {
-    return 'Fecha inválida';
-  }
-}
-  String _capitalizeFirst(String text) {
-    if (text.isEmpty) return text;
-    return text[0].toUpperCase() + text.substring(1).toLowerCase();
-  }
-
-  // ========== MÉTODOS DE DIÁLOGOS Y MENSAJES ==========
-
-  /// Muestra un mensaje de error
   void _mostrarMensajeError(String mensaje) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
