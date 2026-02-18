@@ -21,6 +21,15 @@ class HistorialEstado {
       tipo: map['tipo'] ?? '',
     );
   }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'estado': estado,
+      'fecha': Timestamp.fromDate(fecha),
+      'realizado_por': realizadoPor,
+      'tipo': tipo,
+    };
+  }
 }
 
 class Cita {
@@ -70,7 +79,7 @@ class Cita {
 
   factory Cita.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
-    
+
     return Cita(
       id: doc.id,
       fecha: (data['fecha'] as Timestamp).toDate(),
@@ -97,5 +106,26 @@ class Cita {
               .toList()
           : [],
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'fecha': Timestamp.fromDate(fecha),
+      'hora': hora,
+      'duracion': duracion,
+      'estado': estado,
+      'tipo_consulta': tipoConsulta,
+      'paciente_id': pacienteId,
+      'paciente_nombre': pacienteNombre,
+      if (tratamientoId != null) 'tratamiento_id': tratamientoId,
+      if (tratamientoNombre != null) 'tratamiento_nombre': tratamientoNombre,
+      'es_tratamiento': esTratamiento,
+      'costo': costo,
+      'pagado': pagado,
+      if (atendidoPor != null) 'atendido_por': atendidoPor,
+      if (notasObservaciones != null) 'notas_observaciones': notasObservaciones,
+      'fecha_creacion': Timestamp.fromDate(fechaCreacion),
+      'historial_estados': historialEstados.map((h) => h.toMap()).toList(),
+    };
   }
 }

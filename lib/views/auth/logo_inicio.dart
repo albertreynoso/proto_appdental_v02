@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:proto_appdental_v02/onboardingflow/login.dart';
+import 'package:proto_appdental_v02/core/pin_service.dart';
+import 'package:proto_appdental_v02/views/auth/login.dart';
+import 'package:proto_appdental_v02/views/auth/login_con_pin.dart';
 
 class LogoInicio extends StatefulWidget {
   const LogoInicio({super.key});
@@ -15,32 +17,29 @@ class _LogoInicioState extends State<LogoInicio> {
     _navigateToSignIn();
   }
 
-  void _navigateToSignIn() {
-    // Esperar 2 segundos y navegar a SignIn
-    Future.delayed(const Duration(seconds: 2), () {
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => Login()),
-      );
-    });
+  Future<void> _navigateToSignIn() async {
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+    final hasPin = await PinService().hasPinConfigured();
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => hasPin ? const LoginConPin() : const Login(),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white, // o el color de tu marca
+      backgroundColor: Colors.white,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Tu logo
-            Image.asset(
-              'assets/img/dentlink_logo.png',
-              height: 120,
-            ),
+            Image.asset('assets/img/dentlink_logo.png', height: 120),
             const SizedBox(height: 20),
-            // Texto opcional
             const Text(
               'DentLink',
               style: TextStyle(
@@ -49,11 +48,6 @@ class _LogoInicioState extends State<LogoInicio> {
                 color: Colors.black,
               ),
             ),
-            const SizedBox(height: 20),
-            // Loading indicator opcional
-            /* const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-            ), */
           ],
         ),
       ),

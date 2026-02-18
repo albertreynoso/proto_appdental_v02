@@ -1,11 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:proto_appdental_v02/modals/tratamiento_model.dart';
-import 'package:proto_appdental_v02/modals/cita_model.dart';
-import 'package:proto_appdental_v02/views/tratamiento_nuevo.dart';
-import 'package:proto_appdental_v02/views/tratamiento_detalle.dart';
+import 'package:proto_appdental_v02/models/tratamiento_model.dart';
+import 'package:proto_appdental_v02/models/cita_model.dart';
+import 'package:proto_appdental_v02/views/tratamientos/tratamiento_nuevo.dart';
+import 'package:proto_appdental_v02/views/tratamientos/tratamiento_detalle.dart';
 
 class TratamiendosScreen extends StatefulWidget {
   final Map<String, dynamic> paciente;

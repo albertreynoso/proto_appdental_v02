@@ -1,17 +1,17 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:proto_appdental_v02/modals/citas_modal.dart';
+import 'package:proto_appdental_v02/views/citas/cita_nueva.dart';
 
-class CalendarioScreen extends StatefulWidget {
-  const CalendarioScreen({super.key});
+class CalendarioLegacyScreen extends StatefulWidget {
+  const CalendarioLegacyScreen({super.key});
 
   @override
-  State<CalendarioScreen> createState() => _CalendarioScreenState();
+  State<CalendarioLegacyScreen> createState() => _CalendarioLegacyScreenState();
 }
-class _CalendarioScreenState extends State<CalendarioScreen> {
+class _CalendarioLegacyScreenState extends State<CalendarioLegacyScreen> {
   bool _scrollInicializado = false;
 
   static const List<String> _horariosDisponibles = [
@@ -614,7 +614,7 @@ Widget _construirControlesNavegacion() {
         child: _construirWidgetEventoExtendido(cita),
       );
     } catch (e) {
-      print('❌ Error construyendo cita extendida: $e');
+      debugPrint('❌ Error construyendo cita extendida: $e');
       return null;
     }
   }
@@ -796,7 +796,7 @@ Widget _construirControlesNavegacion() {
   Future<void> _cargarCitas() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      print('⚠️ Usuario no autenticado, omitiendo carga de citas');
+      debugPrint('⚠️ Usuario no autenticado, omitiendo carga de citas');
       return;
     }
 
@@ -816,7 +816,7 @@ Widget _construirControlesNavegacion() {
 
         final diaSiguiente = dia.add(const Duration(days: 1));
 
-        print('🔍 Consultando citas para: $fechaStr');
+        debugPrint('🔍 Consultando citas para: $fechaStr');
 
         final snapshot = await FirebaseFirestore.instance
             .collection('citas')
@@ -826,12 +826,12 @@ Widget _construirControlesNavegacion() {
             .timeout(
               const Duration(seconds: 10),
               onTimeout: () {
-                print('⏰ Timeout consultando citas para $fechaStr');
+                debugPrint('⏰ Timeout consultando citas para $fechaStr');
                 throw TimeoutException('Firestore timeout');
               },
             );
 
-        print('✅ ${snapshot.docs.length} citas encontradas para $fechaStr');
+        debugPrint('✅ ${snapshot.docs.length} citas encontradas para $fechaStr');
 
         final citasDelDia = <Map<String, dynamic>>[];
 
@@ -869,7 +869,7 @@ Widget _construirControlesNavegacion() {
 
       _debugCitas();
     } catch (e) {
-      print('❌ Error cargando citas: $e');
+      debugPrint('❌ Error cargando citas: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -995,7 +995,7 @@ Widget _construirControlesNavegacion() {
         }
       }
     } catch (e) {
-      print('❌ Error pre-cargando citas adyacentes: $e');
+      debugPrint('❌ Error pre-cargando citas adyacentes: $e');
     }
   }
 
@@ -1048,29 +1048,12 @@ Widget _construirControlesNavegacion() {
     );
   }
 
-  void _mostrarDialogoAgregarEvento(DateTime fecha, String hora) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => FractionallySizedBox(
-        heightFactor: 0.95,
-        child: CitaModal(
-          date: fecha,
-          hour: hora,
-          onSave: (datosAtencion) async {
-            try {
-              await FirebaseFirestore.instance.collection('atenciones').add({
-                ...datosAtencion,
-                'fecha': Timestamp.fromDate(datosAtencion['fecha']),
-                'fechaCreacion': Timestamp.now(),
-              });
-              if (mounted) _cargarCitas();
-            } catch (e) {
-              debugPrint('Error al guardar cita: $e');
-            }
-          },
-        ),
+  Future<void> _mostrarDialogoAgregarEvento(DateTime fecha, String hora) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            NuevaCitaScreen(fechaSeleccionada: fecha, horaSeleccionada: hora),
       ),
     );
   }
@@ -1115,18 +1098,18 @@ void _diasSiguientes() {
 }
 
   void _debugCitas() {
-    print('=== 🗓️ DEBUG CITAS CARGADAS ===');
-    print('📊 Total de fechas: ${_citasPorFecha.length}');
+    debugPrint('=== 🗓️ DEBUG CITAS CARGADAS ===');
+    debugPrint('📊 Total de fechas: ${_citasPorFecha.length}');
 
     _citasPorFecha.forEach((fecha, citas) {
-      print('\n📅 $fecha: ${citas.length} citas');
+      debugPrint('\n📅 $fecha: ${citas.length} citas');
       for (var cita in citas) {
         print(
           '   👤 ${cita['nombre_paciente']} | ⏰ ${cita['hora_inicio']}-${cita['hora_fin']}',
         );
       }
     });
-    print('================================\n');
+    debugPrint('================================\n');
   }
 
   void _centrarEnHoraActual() {
@@ -1153,7 +1136,7 @@ void _diasSiguientes() {
         );
       }
     } catch (e) {
-      print('❌ Error al centrar calendario: $e');
+      debugPrint('❌ Error al centrar calendario: $e');
     }
   }
 

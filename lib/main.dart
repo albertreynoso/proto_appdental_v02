@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'main_app.dart';
-import 'onboardingflow/login.dart';
-import 'onboardingflow/signup.dart';
-import 'onboardingflow/logo_inicio.dart';
+import 'package:proto_appdental_v02/views/auth/logo_inicio.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,7 +15,7 @@ class MainApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: "Bottom Nav Bar",
+      title: 'DentLink',
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
@@ -42,10 +40,7 @@ class MainApp extends StatelessWidget {
           ),
         ),
       ),
-
-      home: LogoInicio(),
-      //home: const BottomNav(),
+      home: const LogoInicio(),
     );
   }
 }
-

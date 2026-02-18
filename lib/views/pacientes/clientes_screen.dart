@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'clientes_detalle.dart';
+import 'package:proto_appdental_v02/views/pacientes/clientes_detalle.dart';
 
 class ClientesScreen extends StatefulWidget {
   const ClientesScreen({super.key});

@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
-import 'views/tratamiendos.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:proto_appdental_v02/views/tratamientos/tratamiendos.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'views/paciente_editar.dart';
+import 'package:proto_appdental_v02/views/pacientes/paciente_editar.dart';
 
 /// Pantalla de detalle del paciente
 ///

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'calendario_screen.dart';
-import 'clientes_screen.dart';
-import 'homescreen.dart';
+import 'package:proto_appdental_v02/views/calendario/calendario_screen.dart';
+import 'package:proto_appdental_v02/views/pacientes/clientes_screen.dart';
+import 'package:proto_appdental_v02/views/home/home_screen.dart';
 
 class AppPrincipal extends StatefulWidget {
   const AppPrincipal({super.key});
@@ -34,9 +34,7 @@ class _AppPrincipalState extends State<AppPrincipal> {
 
   void _onItemTapped(int index) {
     if (_selectedIndex != index) {
-      setState(() {
-        _selectedIndex = index;
-      });
+      setState(() => _selectedIndex = index);
       _pageController.jumpToPage(index);
     }
   }
@@ -53,7 +51,6 @@ class _AppPrincipalState extends State<AppPrincipal> {
     );
   }
 
-  /// Bottom Navigation Bar personalizado OPTIMIZADO
   Widget _buildCustomBottomNav() {
     return Container(
       height: 80,
@@ -61,7 +58,7 @@ class _AppPrincipalState extends State<AppPrincipal> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, -2),
           ),
@@ -71,9 +68,9 @@ class _AppPrincipalState extends State<AppPrincipal> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildNavItem(icon: Icons.home, label: "Principal", index: 0),
+            _buildNavItem(icon: Icons.home, label: 'Principal', index: 0),
             _buildCenterButton(),
-            _buildNavItem(icon: Icons.people, label: "Clientes", index: 1),
+            _buildNavItem(icon: Icons.people, label: 'Clientes', index: 1),
           ],
         ),
       ),
@@ -86,7 +83,6 @@ class _AppPrincipalState extends State<AppPrincipal> {
     required int index,
   }) {
     final bool isSelected = _selectedIndex == index;
-
     return GestureDetector(
       onTap: () => _onItemTapped(index),
       child: Container(
@@ -94,11 +90,7 @@ class _AppPrincipalState extends State<AppPrincipal> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              color: isSelected ? Colors.blue : Colors.grey,
-              size: 24,
-            ),
+            Icon(icon, color: isSelected ? Colors.blue : Colors.grey, size: 24),
             const SizedBox(height: 4),
             Text(
               label,
@@ -118,7 +110,7 @@ class _AppPrincipalState extends State<AppPrincipal> {
     return GestureDetector(
       onTap: () => _onItemTapped(2),
       child: Container(
-        transform: Matrix4.translationValues(0, -18, 0), // Sobresale 18px hacia arriba
+        transform: Matrix4.translationValues(0, -18, 0),
         width: 64,
         height: 64,
         decoration: BoxDecoration(
@@ -126,13 +118,13 @@ class _AppPrincipalState extends State<AppPrincipal> {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: Colors.blue.withOpacity(0.4),
+              color: Colors.blue.withValues(alpha: 0.4),
               blurRadius: 10,
               offset: const Offset(0, 5),
             ),
           ],
         ),
-        child: Icon(
+        child: const Icon(
           Icons.calendar_today_rounded,
           color: Colors.white,
           size: 28,

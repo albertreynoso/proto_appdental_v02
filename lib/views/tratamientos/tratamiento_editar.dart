@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
-import 'package:proto_appdental_v02/modals/tratamiento_model.dart';
+import 'package:proto_appdental_v02/models/tratamiento_model.dart';
 
 class EditarTratamiento extends StatefulWidget {
   final Tratamiento tratamiento;
