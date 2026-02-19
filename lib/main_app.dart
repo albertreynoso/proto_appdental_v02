@@ -12,7 +12,6 @@ class AppPrincipal extends StatefulWidget {
 
 class _AppPrincipalState extends State<AppPrincipal> {
   int _selectedIndex = 0;
-  late PageController _pageController;
 
   final List<Widget> _screens = const [
     HomeScreen(),
@@ -20,31 +19,19 @@ class _AppPrincipalState extends State<AppPrincipal> {
     CalendarioScreen(),
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController(initialPage: _selectedIndex);
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
   void _onItemTapped(int index) {
     if (_selectedIndex != index) {
       setState(() => _selectedIndex = index);
-      _pageController.jumpToPage(index);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: PageView(
-        controller: _pageController,
-        physics: const NeverScrollableScrollPhysics(),
+      // IndexedStack mantiene los tres estados vivos en memoria.
+      // Solo cambia cuál es visible — ninguno se destruye al cambiar de tab.
+      body: IndexedStack(
+        index: _selectedIndex,
         children: _screens,
       ),
       bottomNavigationBar: _buildCustomBottomNav(),
@@ -90,13 +77,13 @@ class _AppPrincipalState extends State<AppPrincipal> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: isSelected ? Colors.blue : Colors.grey, size: 24),
+            Icon(icon, color: isSelected ? const Color.fromARGB(255, 113, 206, 6) : Colors.grey, size: 24),
             const SizedBox(height: 4),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: isSelected ? Colors.blue : Colors.grey,
+                color: isSelected ? const Color.fromARGB(255, 113, 206, 6) : Colors.grey,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
@@ -114,11 +101,11 @@ class _AppPrincipalState extends State<AppPrincipal> {
         width: 64,
         height: 64,
         decoration: BoxDecoration(
-          color: Colors.blue,
+          color: const Color.fromARGB(255, 113, 206, 6),
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: Colors.blue.withValues(alpha: 0.4),
+              color: const Color.fromARGB(255, 118, 119, 119).withValues(alpha: 0.4),
               blurRadius: 10,
               offset: const Offset(0, 5),
             ),

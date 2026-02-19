@@ -13,7 +13,8 @@ class CalendarioScreen extends StatefulWidget {
       _CalendarioScreenState();
 }
 
-class _CalendarioScreenState extends State<CalendarioScreen> {
+class _CalendarioScreenState extends State<CalendarioScreen>
+    with TickerProviderStateMixin {
   bool _scrollInicializado = false;
 
   static const List<String> _horariosDisponibles = [
@@ -106,12 +107,25 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
   Timer? _timer;
   bool _primeraCarga = true;
   final Set<String> _fechasCargadas = {};
-  double _dragOffset = 0.0;
-  DateTime? _fechaPreview;
   bool _calendarioExpandido = false;
   int _vistaSeleccionada = 3;
-  double _dragOffsetMes = 0.0;
+
+  // Mini calendario (mes)
+  final ValueNotifier<double> _dragOffsetMes = ValueNotifier(0.0);
   DateTime _mesCalendario = DateTime(DateTime.now().year, DateTime.now().month);
+  // Nombre del mes visible en el header — se actualiza al instante cuando
+  // se confirma el cambio, independiente de cuándo termina la animación.
+  late final ValueNotifier<DateTime> _mesNombreNotifier =
+      ValueNotifier(_mesCalendario);
+  late AnimationController _ctrlAnimMes;
+  Animation<double>? _animMes;
+  VoidCallback? _animMesListener;
+
+  // Grid de días
+  final ValueNotifier<double> _dragOffsetGrid = ValueNotifier(0.0);
+  late AnimationController _ctrlAnimGrid;
+  Animation<double>? _animGrid;
+  VoidCallback? _animGridListener;
 
   final Map<String, List<Map<String, dynamic>>> _citasPorFecha = {};
   final ScrollController _controladorScrollVertical = ScrollController();
@@ -122,6 +136,14 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
   @override
   void initState() {
     super.initState();
+    _ctrlAnimMes = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 260),
+    );
+    _ctrlAnimGrid = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 260),
+    );
     _iniciarTimerTiempoReal();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _centrarEnHoraActual();
@@ -133,6 +155,13 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
   void dispose() {
     _timer?.cancel();
     _controladorScrollVertical.dispose();
+    if (_animMesListener != null) _animMes?.removeListener(_animMesListener!);
+    _ctrlAnimMes.dispose();
+    _dragOffsetMes.dispose();
+    _mesNombreNotifier.dispose();
+    if (_animGridListener != null) _animGrid?.removeListener(_animGridListener!);
+    _ctrlAnimGrid.dispose();
+    _dragOffsetGrid.dispose();
     super.dispose();
   }
 
@@ -156,71 +185,32 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
         children: [
           _construirHeaderCalendario(),
           _construirCalendarioMensual(diasVisibles),
-          _construirCabeceraDias(diasVisibles),
+          _construirCabeceraDiasAnimada(),
           Expanded(
             child: GestureDetector(
-              onHorizontalDragStart: (details) =>
-                  setState(() => _dragOffset = 0.0),
+              onHorizontalDragStart: (_) {
+                if (_ctrlAnimGrid.isAnimating) _ctrlAnimGrid.stop();
+              },
               onHorizontalDragUpdate: (details) {
-                setState(() {
-                  _dragOffset += details.delta.dx;
-                  final screenWidth = MediaQuery.of(context).size.width;
-                  final diasDesplazados = (_dragOffset / screenWidth * _diasVisibles)
-                      .round();
-
-                  _fechaPreview = diasDesplazados != 0
-                      ? _fechaActual.subtract(
-                          Duration(days: diasDesplazados * _diasVisibles),
-                        )
-                      : null;
-                });
+                if (_ctrlAnimGrid.isAnimating) return;
+                _dragOffsetGrid.value += details.delta.dx;
               },
               onHorizontalDragEnd: (details) {
-                final screenWidth = MediaQuery.of(context).size.width;
-                final threshold = screenWidth * 0.25;
-
-                if (_dragOffset.abs() > threshold) {
-                  _dragOffset > 0 ? _diasAnteriores() : _diasSiguientes();
-                }
-
-                setState(() {
-                  _dragOffset = 0.0;
-                  _fechaPreview = null;
-                });
+                _resolverSwipeGrid(details.velocity.pixelsPerSecond.dx);
               },
-              child: AnimatedContainer(
-                duration: _dragOffset != 0
-                    ? Duration.zero
-                    : const Duration(milliseconds: 200),
-                transform: Matrix4.translationValues(_dragOffset, 0, 0),
-                child: Container(
-                  color: Colors.white,
-                  child: Scrollbar(
+              child: Container(
+                color: Colors.white,
+                child: Scrollbar(
+                  controller: _controladorScrollVertical,
+                  thumbVisibility: false,
+                  child: SingleChildScrollView(
                     controller: _controladorScrollVertical,
-                    thumbVisibility: false,
-                    child: SingleChildScrollView(
-                      controller: _controladorScrollVertical,
-                      physics: const ClampingScrollPhysics(),
-                      child: Stack(
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _construirColumnaHoras(),
-                              _construirGrillaDias(
-                                _fechaPreview != null
-                                    ? _obtenerDiasVisiblesDesde(_fechaPreview!)
-                                    : diasVisibles,
-                              ),
-                            ],
-                          ),
-                          if (hoyVisible &&
-                              posicionLinea >= 0 &&
-                              _fechaPreview == null)
-                            _construirLineaTiempoActual(posicionLinea),
-                        ],
-                      ),
-                    ),
+                    physics: const ClampingScrollPhysics(),
+                    child: _vistaSeleccionada == 3
+                        ? _construirScrollContent3Dias(
+                            diasVisibles, posicionLinea, hoyVisible)
+                        : _construirScrollContent1Dia(
+                            diasVisibles, posicionLinea, hoyVisible),
                   ),
                 ),
               ),
@@ -236,6 +226,279 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     );
   }
 
+  // ─── Vista 3 días: solo el grid se traslada, las horas quedan fijas ───────
+  Widget _construirScrollContent3Dias(
+    List<DateTime> diasVisibles,
+    double posicionLinea,
+    bool hoyVisible,
+  ) {
+    final gridWidth = MediaQuery.of(context).size.width - 56;
+    final diasPrev = _obtenerDiasVisiblesDesde(
+        _fechaActual.subtract(Duration(days: _diasVisibles)));
+    final diasNext = _obtenerDiasVisiblesDesde(
+        _fechaActual.add(Duration(days: _diasVisibles)));
+
+    // Paneles pre-construidos FUERA del builder: se crean una vez por setState,
+    // no en cada frame del arrastre. RepaintBoundary los cachea en capa GPU.
+    Widget panel(List<DateTime> dias) => RepaintBoundary(
+          child: SizedBox(width: gridWidth, child: _construirGrillaStack(dias)),
+        );
+    final panelPrev = panel(diasPrev);
+    final panelAct  = panel(diasVisibles);
+    final panelNext = panel(diasNext);
+
+    return Stack(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _construirColumnaHoras(),
+            SizedBox(
+              width: gridWidth,
+              child: ClipRect(
+                child: ValueListenableBuilder<double>(
+                  valueListenable: _dragOffsetGrid,
+                  // El builder solo crea Transform.translate (trivial).
+                  // Los paneles son las mismas referencias → sin rebuild.
+                  builder: (_, offset, __) => Stack(
+                    children: [
+                      if (offset > 0)
+                        Transform.translate(
+                          offset: Offset(offset - gridWidth, 0),
+                          child: panelPrev,
+                        ),
+                      Transform.translate(
+                        offset: Offset(offset, 0),
+                        child: panelAct,
+                      ),
+                      if (offset < 0)
+                        Transform.translate(
+                          offset: Offset(offset + gridWidth, 0),
+                          child: panelNext,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (hoyVisible && posicionLinea >= 0)
+          _construirLineaTiempoActual(posicionLinea),
+      ],
+    );
+  }
+
+  // ─── Vista 1 día: todo (horas + grid) se traslada ────────────────────────
+  Widget _construirScrollContent1Dia(
+    List<DateTime> diasVisibles,
+    double posicionLinea,
+    bool hoyVisible,
+  ) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final diasPrev =
+        _obtenerDiasVisiblesDesde(_fechaActual.subtract(const Duration(days: 1)));
+    final diasNext =
+        _obtenerDiasVisiblesDesde(_fechaActual.add(const Duration(days: 1)));
+
+    Widget panel(List<DateTime> dias) => RepaintBoundary(
+          child: SizedBox(
+            width: screenWidth,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _construirColumnaHoras(),
+                Expanded(child: _construirGrillaStack(dias)),
+              ],
+            ),
+          ),
+        );
+
+    final panelPrev = panel(diasPrev);
+    final panelAct  = panel(diasVisibles);
+    final panelNext = panel(diasNext);
+
+    return ValueListenableBuilder<double>(
+      valueListenable: _dragOffsetGrid,
+      builder: (_, offset, __) => Stack(
+        children: [
+          if (offset > 0)
+            Transform.translate(
+              offset: Offset(offset - screenWidth, 0),
+              child: panelPrev,
+            ),
+          Transform.translate(
+            offset: Offset(offset, 0),
+            child: panelAct,
+          ),
+          if (offset < 0)
+            Transform.translate(
+              offset: Offset(offset + screenWidth, 0),
+              child: panelNext,
+            ),
+          if (hoyVisible && posicionLinea >= 0)
+            _construirLineaTiempoActual(posicionLinea),
+        ],
+      ),
+    );
+  }
+
+  // ─── Lógica de snap al soltar el dedo ────────────────────────────────────
+  void _resolverSwipeGrid(double velocidadDx) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final gridWidth = screenWidth - 56;
+    // En vista 1 día movemos toda la pantalla; en 3 días, solo el grid
+    final pageWidth = _vistaSeleccionada == 1 ? screenWidth : gridWidth;
+    final colWidth = pageWidth / _diasVisibles;
+    final offset = _dragOffsetGrid.value;
+
+    // Cuántos días hay que avanzar
+    const umbralVelocidad = 200.0;
+    int diasShifted;
+    if (velocidadDx.abs() > umbralVelocidad) {
+      // Swipe rápido: saltar página completa en la dirección de la velocidad
+      diasShifted = velocidadDx < 0 ? _diasVisibles : -_diasVisibles;
+    } else {
+      // Snap basado en posición: cuántas columnas cruzó el dedo
+      diasShifted =
+          (-offset / colWidth).round().clamp(-_diasVisibles, _diasVisibles);
+    }
+
+    final double targetOffset = -diasShifted * colWidth;
+
+    _animarOffsetGrid(
+      hasta: targetOffset,
+      velocidadPx: velocidadDx.abs(),
+      alTerminar: () {
+        if (diasShifted != 0) {
+          final nuevaFecha =
+              _fechaActual.add(Duration(days: diasShifted));
+          final nuevoMes =
+              DateTime(nuevaFecha.year, nuevaFecha.month);
+          setState(() {
+            _fechaActual = nuevaFecha;
+            _mesCalendario = nuevoMes;
+          });
+          _mesNombreNotifier.value = nuevoMes;
+          _cargarCitas().then((_) => _precargarCitasAdyacentes());
+        }
+        _dragOffsetGrid.value = 0.0;
+      },
+    );
+  }
+
+  void _navegarAFecha(DateTime nuevaFecha) {
+    // Si la fecha ya está visible, solo cerrar el mini calendario
+    if (_obtenerDiasVisibles().any((d) => _esMismoDia(d, nuevaFecha))) {
+      setState(() => _calendarioExpandido = false);
+      return;
+    }
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final pageWidth =
+        _vistaSeleccionada == 1 ? screenWidth : screenWidth - 56;
+    final bool haciaAdelante = nuevaFecha.isAfter(_fechaActual);
+    final nuevoMes = DateTime(nuevaFecha.year, nuevaFecha.month);
+
+    // La nueva fecha pasa a ser el panel "actual"; el estado se actualiza ya
+    setState(() {
+      _fechaActual = nuevaFecha;
+      _mesCalendario = nuevoMes;
+      _calendarioExpandido = false;
+    });
+    _mesNombreNotifier.value = nuevoMes;
+    _cargarCitas();
+
+    // Colocar el panel entrante fuera de pantalla en la dirección correcta
+    // y deslizarlo al centro con la misma curva de los swipes normales
+    _dragOffsetGrid.value = haciaAdelante ? pageWidth : -pageWidth;
+    _animarOffsetGrid(
+      hasta: 0.0,
+      duracionFijaMs: 750,
+      alTerminar: () => _dragOffsetGrid.value = 0.0,
+    );
+  }
+
+  void _animarOffsetGrid({
+    required double hasta,
+    VoidCallback? alTerminar,
+    double velocidadPx = 0,
+    int? duracionFijaMs,
+  }) {
+    if (_animGridListener != null) {
+      _animGrid?.removeListener(_animGridListener!);
+    }
+    _ctrlAnimGrid.stop();
+    _ctrlAnimGrid.reset();
+
+    final double distancia = (hasta - _dragOffsetGrid.value).abs();
+    double duracionMs;
+    if (duracionFijaMs != null) {
+      duracionMs = duracionFijaMs.toDouble();
+    } else if (velocidadPx > 0 && hasta != 0.0) {
+      duracionMs = (distancia / velocidadPx * 1000).clamp(80, 240);
+    } else {
+      duracionMs = (distancia / 800 * 260).clamp(120, 300);
+    }
+    _ctrlAnimGrid.duration = Duration(milliseconds: duracionMs.round());
+
+    _animGrid = Tween<double>(
+      begin: _dragOffsetGrid.value,
+      end: hasta,
+    ).animate(CurvedAnimation(
+      parent: _ctrlAnimGrid,
+      curve: hasta == 0.0 ? Curves.easeOutCubic : Curves.easeInOutCubic,
+    ));
+
+    _animGridListener = () => _dragOffsetGrid.value = _animGrid!.value;
+    _animGrid!.addListener(_animGridListener!);
+
+    _ctrlAnimGrid.forward().whenComplete(() {
+      _animGrid?.removeListener(_animGridListener!);
+      _animGridListener = null;
+      alTerminar?.call();
+    });
+  }
+
+  void _animarOffsetMes({
+    required double hasta,
+    VoidCallback? alTerminar,
+    double velocidadPx = 0,
+  }) {
+    if (_animMesListener != null) {
+      _animMes?.removeListener(_animMesListener!);
+    }
+    _ctrlAnimMes.stop();
+    _ctrlAnimMes.reset();
+
+    final double distancia = (hasta - _dragOffsetMes.value).abs();
+    double duracionMs;
+    if (velocidadPx > 0 && hasta != 0.0) {
+      // Duración basada en velocidad real del gesto: d/v, con límites
+      duracionMs = (distancia / velocidadPx * 1000).clamp(80, 240);
+    } else {
+      duracionMs = (distancia / 800 * 260).clamp(120, 300);
+    }
+    _ctrlAnimMes.duration = Duration(milliseconds: duracionMs.round());
+
+    _animMes = Tween<double>(
+      begin: _dragOffsetMes.value,
+      end: hasta,
+    ).animate(CurvedAnimation(
+      parent: _ctrlAnimMes,
+      curve: hasta == 0.0 ? Curves.easeOutCubic : Curves.easeInOutCubic,
+    ));
+
+    _animMesListener = () => _dragOffsetMes.value = _animMes!.value;
+    _animMes!.addListener(_animMesListener!);
+
+    _ctrlAnimMes.forward().whenComplete(() {
+      _animMes?.removeListener(_animMesListener!);
+      _animMesListener = null;
+      alTerminar?.call();
+    });
+  }
+
   Widget _construirHeaderCalendario() {
     return SafeArea(
       bottom: false,
@@ -249,13 +512,16 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    _nombresMeses[_mesCalendario.month - 1],
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                      letterSpacing: -0.5,
+                  ValueListenableBuilder<DateTime>(
+                    valueListenable: _mesNombreNotifier,
+                    builder: (_, mes, __) => Text(
+                      _nombresMeses[mes.month - 1],
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                        letterSpacing: -0.5,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 4),
@@ -319,8 +585,42 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     );
   }
 
+  Widget _construirContenidoMes(DateTime mes, DateTime hoy, List<DateTime> diasVisibles) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Encabezado días de la semana
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa']
+                  .map((d) => Expanded(
+                        child: Center(
+                          child: Text(
+                            d,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF9E9E9E),
+                            ),
+                          ),
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ),
+          // Grilla de días
+          ..._construirSemanasMes(mes, hoy, diasVisibles),
+        ],
+      ),
+    );
+  }
+
   Widget _construirCalendarioMensual(List<DateTime> diasVisibles) {
     final hoy = DateTime.now();
+    final screenWidth = MediaQuery.of(context).size.width;
 
     return AnimatedSize(
       duration: const Duration(milliseconds: 250),
@@ -329,59 +629,92 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
       child: _calendarioExpandido
           ? GestureDetector(
               onHorizontalDragUpdate: (details) {
-                setState(() => _dragOffsetMes += details.delta.dx);
+                if (_ctrlAnimMes.isAnimating) return;
+                _dragOffsetMes.value += details.delta.dx;
               },
               onHorizontalDragEnd: (details) {
-                final screenWidth = MediaQuery.of(context).size.width;
-                if (_dragOffsetMes.abs() > screenWidth * 0.2) {
-                  setState(() {
-                    if (_dragOffsetMes > 0) {
-                      // Swipe derecha → mes anterior
-                      _mesCalendario = DateTime(
-                        _mesCalendario.year,
-                        _mesCalendario.month - 1,
-                      );
-                    } else {
-                      // Swipe izquierda → mes siguiente
-                      _mesCalendario = DateTime(
-                        _mesCalendario.year,
-                        _mesCalendario.month + 1,
-                      );
-                    }
-                  });
+                const double umbralVelocidad = 300.0; // px/s
+                final double velocidad = details.velocity.pixelsPerSecond.dx;
+                final bool superaDistancia =
+                    _dragOffsetMes.value.abs() > screenWidth * 0.5;
+                final bool superaVelocidad = velocidad.abs() > umbralVelocidad;
+
+                // Determinar dirección: negativo = hacia siguiente mes
+                // Si no se movió nada pero hay velocidad, la velocidad manda la dirección
+                final bool vaSiguiente = _dragOffsetMes.value != 0
+                    ? _dragOffsetMes.value < 0
+                    : velocidad < 0;
+
+                if (superaDistancia || superaVelocidad) {
+                  final mesDestino = vaSiguiente
+                      ? DateTime(_mesCalendario.year, _mesCalendario.month + 1)
+                      : DateTime(_mesCalendario.year, _mesCalendario.month - 1);
+
+                  // Cambiar el nombre en el header al instante, sin esperar animación
+                  _mesNombreNotifier.value = mesDestino;
+
+                  final double destino = vaSiguiente ? -screenWidth : screenWidth;
+                  _animarOffsetMes(
+                    hasta: destino,
+                    velocidadPx: velocidad.abs(),
+                    alTerminar: () {
+                      setState(() => _mesCalendario = mesDestino);
+                      _dragOffsetMes.value = 0.0;
+                    },
+                  );
+                } else {
+                  // No llegó al umbral ni tuvo velocidad: rebotar al mes actual
+                  _mesNombreNotifier.value = _mesCalendario;
+                  _animarOffsetMes(hasta: 0.0);
                 }
-                setState(() => _dragOffsetMes = 0.0);
               },
               child: Container(
                 color: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Encabezado días de la semana
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa']
-                            .map((d) => Expanded(
-                                  child: Center(
-                                    child: Text(
-                                      d,
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                        color: Color(0xFF9E9E9E),
-                                      ),
-                                    ),
-                                  ),
-                                ))
-                            .toList(),
+                child: ClipRect(
+                  child: Builder(builder: (context) {
+                    // Paneles pre-construidos fuera del ValueListenableBuilder.
+                    // Se crean una vez por setState; el builder solo mueve transforms.
+                    final panelActual = RepaintBoundary(
+                      child: _construirContenidoMes(
+                          _mesCalendario, hoy, diasVisibles),
+                    );
+                    final panelPrev = RepaintBoundary(
+                      child: _construirContenidoMes(
+                          DateTime(_mesCalendario.year,
+                              _mesCalendario.month - 1),
+                          hoy,
+                          diasVisibles),
+                    );
+                    final panelNext = RepaintBoundary(
+                      child: _construirContenidoMes(
+                          DateTime(_mesCalendario.year,
+                              _mesCalendario.month + 1),
+                          hoy,
+                          diasVisibles),
+                    );
+
+                    return ValueListenableBuilder<double>(
+                      valueListenable: _dragOffsetMes,
+                      builder: (_, offset, __) => Stack(
+                        children: [
+                          Transform.translate(
+                            offset: Offset(offset, 0),
+                            child: panelActual,
+                          ),
+                          if (offset != 0)
+                            Transform.translate(
+                              offset: Offset(
+                                offset > 0
+                                    ? offset - screenWidth
+                                    : offset + screenWidth,
+                                0,
+                              ),
+                              child: offset > 0 ? panelPrev : panelNext,
+                            ),
+                        ],
                       ),
-                    ),
-                    // Grilla de días
-                    ..._construirSemanasMes(_mesCalendario, hoy, diasVisibles),
-                    const SizedBox(height: 4),
-                  ],
+                    );
+                  }),
                 ),
               ),
             )
@@ -430,19 +763,6 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
       semanas.add(Row(children: semanaActual));
     }
 
-    // Fila extra: primera semana del mes siguiente si el mes termina en sábado
-    final ultimoDiaMostrado = DateTime(mes.year, mes.month, diasEnMes);
-    final ultimoOffset = ultimoDiaMostrado.weekday % 7;
-    if (ultimoOffset == 6) {
-      // El mes termina en sábado, la siguiente semana es toda del mes siguiente
-      List<Widget> semanaExtra = [];
-      for (int d = 1; d <= 7; d++) {
-        final dia = DateTime(mes.year, mes.month + 1, d);
-        semanaExtra.add(_construirCeldaDia(dia, false, hoy, diasVisibles));
-      }
-      semanas.add(Row(children: semanaExtra));
-    }
-
     return semanas;
   }
 
@@ -457,14 +777,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
 
     return Expanded(
       child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _fechaActual = dia;
-            _mesCalendario = DateTime(dia.year, dia.month);
-            _calendarioExpandido = false;
-          });
-          _cargarCitas();
-        },
+        onTap: () => _navegarAFecha(dia),
         child: Container(
           height: 38,
           decoration: BoxDecoration(
@@ -479,7 +792,7 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
               height: 32,
               decoration: esHoy
                   ? BoxDecoration(
-                      color: const Color(0xFFEF4444),
+                      color: const Color.fromARGB(255, 113, 206, 6),
                       shape: BoxShape.circle,
                     )
                   : null,
@@ -506,60 +819,164 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     );
   }
 
-  Widget _construirCabeceraDias(List<DateTime> diasVisibles) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFE5E5E5), width: 1)),
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 56),
-          Expanded(
-            child: Row(
-              children: diasVisibles.map((dia) {
-                final isToday = _esMismoDia(dia, DateTime.now());
-                return Expanded(child: _construirEncabezadoDia(dia, isToday));
-              }).toList(),
+  Widget _construirCabeceraDiasAnimada() {
+    final hoy = DateTime.now();
+    final screenWidth = MediaQuery.of(context).size.width;
+    final gridWidth = screenWidth - 56;
+
+    const _decoracion = BoxDecoration(
+      color: Colors.white,
+      border: Border(bottom: BorderSide(color: Color(0xFFE5E5E5), width: 1)),
+    );
+
+    Widget filaDias(List<DateTime> dias) => Row(
+          children: dias
+              .map((d) => Expanded(
+                    child: _construirEncabezadoDia(d, _esMismoDia(d, hoy)),
+                  ))
+              .toList(),
+        );
+
+    Widget headerPanel(List<DateTime> dias, double width) => RepaintBoundary(
+          child: SizedBox(width: width, child: filaDias(dias)),
+        );
+
+    if (_vistaSeleccionada == 3) {
+      final diasPrev = _obtenerDiasVisiblesDesde(
+          _fechaActual.subtract(Duration(days: _diasVisibles)));
+      final diasAct  = _obtenerDiasVisibles();
+      final diasNext = _obtenerDiasVisiblesDesde(
+          _fechaActual.add(Duration(days: _diasVisibles)));
+
+      final hPrev = headerPanel(diasPrev, gridWidth);
+      final hAct  = headerPanel(diasAct,  gridWidth);
+      final hNext = headerPanel(diasNext, gridWidth);
+
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: _decoracion,
+        child: Row(
+          children: [
+            const SizedBox(width: 56),
+            Expanded(
+              child: ClipRect(
+                child: ValueListenableBuilder<double>(
+                  valueListenable: _dragOffsetGrid,
+                  builder: (_, offset, __) => Stack(
+                    children: [
+                      if (offset > 0)
+                        Transform.translate(
+                          offset: Offset(offset - gridWidth, 0),
+                          child: hPrev,
+                        ),
+                      Transform.translate(
+                        offset: Offset(offset, 0),
+                        child: hAct,
+                      ),
+                      if (offset < 0)
+                        Transform.translate(
+                          offset: Offset(offset + gridWidth, 0),
+                          child: hNext,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      final diasPrev = _obtenerDiasVisiblesDesde(
+          _fechaActual.subtract(const Duration(days: 1)));
+      final diasAct  = _obtenerDiasVisibles();
+      final diasNext =
+          _obtenerDiasVisiblesDesde(_fechaActual.add(const Duration(days: 1)));
+
+      Widget panel1d(List<DateTime> dias) => RepaintBoundary(
+            child: SizedBox(
+              width: screenWidth,
+              child: Row(children: [
+                const SizedBox(width: 56),
+                Expanded(child: filaDias(dias)),
+              ]),
+            ),
+          );
+
+      final hPrev = panel1d(diasPrev);
+      final hAct  = panel1d(diasAct);
+      final hNext = panel1d(diasNext);
+
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: _decoracion,
+        child: ClipRect(
+          child: ValueListenableBuilder<double>(
+            valueListenable: _dragOffsetGrid,
+            builder: (_, offset, __) => Stack(
+              children: [
+                if (offset > 0)
+                  Transform.translate(
+                    offset: Offset(offset - screenWidth, 0),
+                    child: hPrev,
+                  ),
+                Transform.translate(
+                  offset: Offset(offset, 0),
+                  child: hAct,
+                ),
+                if (offset < 0)
+                  Transform.translate(
+                    offset: Offset(offset + screenWidth, 0),
+                    child: hNext,
+                  ),
+              ],
             ),
           ),
-        ],
-      ),
-    );
+        ),
+      );
+    }
   }
 
   Widget _construirEncabezadoDia(DateTime date, bool isToday) {
+    const verde = Color.fromARGB(255, 113, 206, 6);
+    final esFinDeSemana =
+        date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
+
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          _nombresDias[date.weekday]!,
+          _nombresDias[date.weekday]!.toUpperCase(),
           style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.4,
             color: isToday
-                ? const Color.fromARGB(255, 113, 206, 6)
-                : Colors.black45,
-            letterSpacing: 0.5,
+                ? verde
+                : esFinDeSemana
+                    ? Colors.black38
+                    : Colors.black45,
           ),
         ),
         const SizedBox(height: 6),
         Container(
-          width: 32,
-          height: 32,
+          width: 38,
+          height: 38,
           decoration: BoxDecoration(
-            color: isToday
-                ? const Color.fromARGB(255, 113, 206, 6)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
+            color: isToday ? verde : const Color(0xFFF0F0F0),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Center(
             child: Text(
               date.day.toString(),
               style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: isToday ? Colors.white : Colors.black87,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: isToday
+                    ? Colors.white
+                    : esFinDeSemana
+                        ? Colors.black54
+                        : Colors.black87,
               ),
             ),
           ),
@@ -605,14 +1022,13 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     );
   }
 
-  Widget _construirGrillaDias(List<DateTime> diasVisibles) {
-    return Expanded(
-      child: Stack(
-        children: [
-          _construirFondoGrilla(diasVisibles),
-          ..._construirCitasExtendidas(diasVisibles),
-        ],
-      ),
+  // Stack interno de la grilla (sin Expanded), usado en animaciones
+  Widget _construirGrillaStack(List<DateTime> diasVisibles) {
+    return Stack(
+      children: [
+        _construirFondoGrilla(diasVisibles),
+        ..._construirCitasExtendidas(diasVisibles),
+      ],
     );
   }
 
@@ -1049,10 +1465,6 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     );
   }
 
-  void _mostrarDialogoAgregarEvento(DateTime fecha, String hora) {
-    _navegarANuevaCita(fecha, hora);
-  }
-
   void _iniciarTimerTiempoReal() {
     _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (mounted) setState(() => _horaActual = DateTime.now());
@@ -1196,23 +1608,6 @@ class _CalendarioScreenState extends State<CalendarioScreen> {
     final screenHeight = MediaQuery.of(context).size.height;
     final alturaBase = (screenHeight - kToolbarHeight - 120) * 0.85 / 12;
     return _vistaSeleccionada == 1 ? alturaBase * 2 : alturaBase;
-  }
-
-  void _diasAnteriores() {
-    setState(
-      () => _fechaActual = _fechaActual.subtract(
-        Duration(days: _diasVisibles),
-      ),
-    );
-    _cargarCitas().then((_) => _precargarCitasAdyacentes());
-  }
-
-  void _diasSiguientes() {
-    setState(
-      () =>
-          _fechaActual = _fechaActual.add(Duration(days: _diasVisibles)),
-    );
-    _cargarCitas().then((_) => _precargarCitasAdyacentes());
   }
 
   String _sumarMinutos(String hora, int minutos) {
